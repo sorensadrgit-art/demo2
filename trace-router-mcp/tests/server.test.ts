@@ -3,6 +3,7 @@ import http from 'node:http';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { toNodeHandler } from '@modelcontextprotocol/node';
 import { buildMcpHandler } from '../src/server.js';
+import { policyFingerprint } from '../src/core.js';
 
 const policy = `---\nname: trace-router\ndescription: test\n---\n# TRACE Router\nTest policy body.`;
 const servers: http.Server[] = [];
@@ -13,8 +14,8 @@ afterEach(async () => {
   await Promise.all(servers.splice(0).map(server => new Promise<void>(resolve => server.close(() => resolve()))));
 });
 
-async function connect() {
-  const nodeHandler = toNodeHandler(buildMcpHandler(policy));
+async function connect(policyText = policy) {
+  const nodeHandler = toNodeHandler(buildMcpHandler(policyText));
   const server = http.createServer(nodeHandler);
   servers.push(server);
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', () => resolve()));
@@ -61,5 +62,13 @@ describe('TRACE Router MCP server', () => {
     const body = text(result);
     expect(body.policy).toBe(policy);
     expect(body.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('canonicalizes CRLF policy text before returning and fingerprinting it', async () => {
+    const client = await connect(policy.replace(/\n/g, '\r\n'));
+    const result = await client.callTool({ name: 'trace_policy', arguments: {} });
+    const body = text(result);
+    expect(body.policy).toBe(policy);
+    expect(body.fingerprint).toBe(policyFingerprint(policy));
   });
 });
