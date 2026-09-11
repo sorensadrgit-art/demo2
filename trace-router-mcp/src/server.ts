@@ -19,6 +19,10 @@ const evidenceSchema = z.object({
   detail: z.string(),
 });
 
+function canonicalPolicyText(text: string): string {
+  return text.replace(/\r\n?/g, '\n');
+}
+
 export function loadPolicy(): string {
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = [
@@ -26,12 +30,13 @@ export function loadPolicy(): string {
     resolve(here, '../trace-router/SKILL.md'),
   ];
   for (const candidate of candidates) {
-    try { return readFileSync(candidate, 'utf8'); } catch { /* try next */ }
+    try { return canonicalPolicyText(readFileSync(candidate, 'utf8')); } catch { /* try next */ }
   }
   throw new Error('TRACE policy file was not found at trace-router/SKILL.md.');
 }
 
 export function buildMcpHandler(policyText = loadPolicy()) {
+  const canonicalPolicy = canonicalPolicyText(policyText);
   return createMcpHandler(() => {
     const server = new McpServer(
       { name: 'trace-router', version: '1.0.0' },
@@ -74,7 +79,7 @@ export function buildMcpHandler(policyText = loadPolicy()) {
         inputSchema: z.object({}),
       },
       async () => ({
-        content: [{ type: 'text', text: JSON.stringify({ policy: policyText, fingerprint: policyFingerprint(policyText), version: '1.0.0' }, null, 2) }],
+        content: [{ type: 'text', text: JSON.stringify({ policy: canonicalPolicy, fingerprint: policyFingerprint(canonicalPolicy), version: '1.0.0' }, null, 2) }],
       }),
     );
 
@@ -83,12 +88,13 @@ export function buildMcpHandler(policyText = loadPolicy()) {
 }
 
 export function createHttpServer(policyText = loadPolicy()): http.Server {
-  const mcp = toNodeHandler(buildMcpHandler(policyText));
+  const canonicalPolicy = canonicalPolicyText(policyText);
+  const mcp = toNodeHandler(buildMcpHandler(canonicalPolicy));
   return http.createServer((req, res) => {
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
     if (url.pathname === '/health') {
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, name: 'trace-router', version: '1.0.0', policyFingerprint: policyFingerprint(policyText) }));
+      res.end(JSON.stringify({ ok: true, name: 'trace-router', version: '1.0.0', policyFingerprint: policyFingerprint(canonicalPolicy) }));
       return;
     }
     if (url.pathname !== '/mcp') {
