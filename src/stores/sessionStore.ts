@@ -7,7 +7,7 @@ import type { ROMTrial } from '../features/rom/romEngine';
 import type { EstimatedKineticSample, SensorSample } from '../features/kinetics/kineticsTypes';
 
 export type SourceMode = 'webcam' | 'upload' | 'multicam' | 'demo';
-export type AppMode = 'measure' | 'goniometer' | 'symmetry' | 'analysis3d' | 'report' | 'progress';
+export type AppMode = 'focus' | 'measure' | 'goniometer' | 'symmetry' | 'analysis3d' | 'report' | 'progress';
 
 export interface MetricSample {
   t: number;
@@ -56,7 +56,7 @@ const MAX_TIMELINE = 60 * 60 * 10; // ~10 min at 60 Hz
 
 export const useSession = create<SessionState>((set) => ({
   sourceMode: 'webcam',
-  appMode: 'measure',
+  appMode: 'focus',
   activeJoint: 'leftKnee',
   activeSubjectId: null,
   trackingState: 'unselected',

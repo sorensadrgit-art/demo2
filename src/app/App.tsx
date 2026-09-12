@@ -1,4 +1,6 @@
 import LabScreen from './LabScreen';
+import FocusShell from '../features/focus/FocusShell';
+import { useFocus } from '../features/focus/focusStore';
 import GoniometerMode from '../features/rom/GoniometerMode';
 import SessionReport from '../features/reports/SessionReport';
 import PatientDashboard from '../features/patients/PatientDashboard';
@@ -20,6 +22,9 @@ export default function App() {
   const set = useSession((s) => s.set);
   const localOnly = useUI((s) => s.localOnly);
   const toggle = useUI((s) => s.toggle);
+  const experience = useFocus((s) => s.experience);
+  const setFocus = useFocus((s) => s.set);
+  const inFocus = experience === 'focus';
 
   return (
     <div className="flex h-full flex-col bg-[#04070d] text-slate-100">
@@ -32,8 +37,25 @@ export default function App() {
           <h1 className="text-sm font-extrabold tracking-[0.28em] text-slate-100">KINELAB</h1>
           <span className="hidden text-[10px] tracking-widest text-slate-500 sm:inline">MOTION ANALYSIS LABORATORY</span>
         </div>
+        <div className="ml-2 flex flex-wrap items-center gap-1" role="group" aria-label="Experience">
+          <button
+            onClick={() => { setFocus({ experience: 'focus' }); set({ appMode: 'focus' }); }}
+            aria-pressed={inFocus}
+            className={`rounded px-2.5 py-1 text-[11px] font-extrabold tracking-widest ${inFocus ? 'bg-sky-500/25 text-sky-100 ring-1 ring-sky-400/50' : 'text-slate-400 hover:text-slate-200'}`}
+          >
+            FOCUS
+          </button>
+          <button
+            onClick={() => { setFocus({ experience: 'lab' }); if (appMode === 'focus') set({ appMode: 'measure' }); }}
+            aria-pressed={!inFocus}
+            className={`rounded px-2.5 py-1 text-[11px] font-bold tracking-widest ${!inFocus ? 'bg-sky-500/25 text-sky-100 ring-1 ring-sky-400/50' : 'text-slate-400 hover:text-slate-200'}`}
+          >
+            LAB
+          </button>
+        </div>
+        {!inFocus && (
         <nav className="ml-2 flex flex-wrap gap-1" aria-label="Mode">
-          {([['measure', 'MEASURE'], ['goniometer', 'GONIOMETER'], ['symmetry', 'SYMMETRY'], ['analysis3d', '3D'], ['report', 'REPORT'], ['progress', 'PROGRESS']] as Array<[typeof appMode, string]>).map(([m, label]) => (
+          {([['measure', 'MEASURE'], ['goniometer', 'GONIOMETER'], ['symmetry', 'SYMMETRY'], ['analysis3d', '3D'], ['report', 'REPORT'], ['progress', 'PROGRESS']] as Array<[Exclude<typeof appMode, 'focus'>, string]>).map(([m, label]) => (
             <button
               key={m}
               onClick={() => set({ appMode: m })}
@@ -44,6 +66,7 @@ export default function App() {
             </button>
           ))}
         </nav>
+        )}
       </header>
       {/* Session workflow strip */}
       <div className="no-print flex items-center gap-1 overflow-x-auto border-b border-white/5 bg-black/40 px-3 py-1" aria-label="Session workflow">
@@ -64,32 +87,33 @@ export default function App() {
       </div>
 
       <div id="workspace" className="min-h-0 flex-1">
-        {appMode === 'measure' && <LabScreen />}
-        {appMode === 'goniometer' && (
+        {(appMode === 'focus' || inFocus) && <FocusShell />}
+        {appMode === 'measure' && !inFocus && <LabScreen />}
+        {appMode === 'goniometer' && !inFocus && (
           <div className="h-full overflow-y-auto p-4">
             <BackButton />
             <GoniometerMode />
           </div>
         )}
-        {appMode === 'symmetry' && (
+        {appMode === 'symmetry' && !inFocus && (
           <div className="mx-auto h-full max-w-2xl overflow-y-auto">
             <div className="p-4"><BackButton /></div>
             <SymmetryPanel />
           </div>
         )}
-        {appMode === 'analysis3d' && (
+        {appMode === 'analysis3d' && !inFocus && (
           <div className="h-full p-4">
             <BackButton />
             <div className="h-[calc(100%-40px)] rounded-2xl border border-white/10 bg-white/[0.02]"><BodyScene /></div>
           </div>
         )}
-        {appMode === 'report' && (
+        {appMode === 'report' && !inFocus && (
           <div className="h-full overflow-y-auto">
             <div className="p-4 pb-0"><BackButton /></div>
             <SessionReport />
           </div>
         )}
-        {appMode === 'progress' && (
+        {appMode === 'progress' && !inFocus && (
           <div className="mx-auto grid h-full max-w-5xl grid-cols-1 gap-3 overflow-y-auto p-4 md:grid-cols-2">
             <div className="col-span-1 md:col-span-2"><BackButton /></div>
             <div className="min-h-[300px] rounded-2xl border border-white/10 bg-white/[0.02]"><PatientDashboard /></div>
