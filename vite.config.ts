@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { viteSingleFile } from 'vite-plugin-singlefile';
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), viteSingleFile()],
   // Relative asset URLs so the app loads behind a sub-path proxy
   // (e.g. /sandbox/39033) as well as at the domain root.
   base: './',
