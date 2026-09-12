@@ -186,8 +186,9 @@ export class CycleCounter {
   private start = 0;
   private extreme = 0;
   private dir: 'idle' | 'away' | 'back' = 'idle';
+  private stillCount = 0;
   cycles = 0;
-  reset() { this.dir = 'idle'; this.cycles = 0; this.start = 0; this.extreme = 0; }
+  reset() { this.dir = 'idle'; this.cycles = 0; this.start = 0; this.extreme = 0; this.stillCount = 0; }
 
   /** Push valid samples; returns total completed cycles. */
   push(angle: number, vel: number, minExcursionDeg: number): number {
@@ -196,6 +197,7 @@ export class CycleCounter {
     if (this.dir === 'idle') {
       this.start = angle;
       this.extreme = angle;
+      this.stillCount = 0;
       if (moving) this.dir = 'away';
       return this.cycles;
     }
@@ -203,6 +205,11 @@ export class CycleCounter {
     if (angle > Math.max(this.start, this.extreme)) this.extreme = Math.max(this.extreme, angle);
     const excursion = Math.abs(this.extreme - this.start);
     const nearStart = Math.abs(angle - this.start) <= Math.max(6, excursion * 0.2);
+    // Sustained stillness away from start means a stalled attempt — re-anchor.
+    // A single still sample is normal at smooth reversal points (peak flexion
+    // / full extension), where velocity legitimately crosses zero mid-cycle.
+    if (!moving && !nearStart) this.stillCount += 1;
+    else this.stillCount = 0;
     if (this.dir === 'away') {
       // Reversal toward start after a sufficient excursion begins the return.
       if (excursion >= minExcursionDeg && nearStart) {
@@ -210,12 +217,15 @@ export class CycleCounter {
         this.dir = 'idle';
       } else if (excursion >= minExcursionDeg && !nearStart) {
         this.dir = 'back';
+      } else if (this.stillCount >= 4) {
+        // Stalled before reaching excursion: re-anchor for a fresh attempt.
+        this.dir = 'idle';
       }
     } else if (this.dir === 'back') {
       if (nearStart && excursion >= minExcursionDeg) {
         this.cycles += 1;
         this.dir = 'idle';
-      } else if (!moving && !nearStart) {
+      } else if (this.stillCount >= 4) {
         // Stalled mid-range: re-anchor so a fresh attempt can be counted.
         this.dir = 'idle';
       }

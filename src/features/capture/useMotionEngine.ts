@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { MediaPipePoseProvider } from '../pose/MediaPipePoseProvider';
+import { getE2EPoseSource } from '../pose/SyntheticPoseSource';
+import { useFocus } from '../focus/focusStore';
 import { SubjectTracker } from '../tracking/subjectTracker';
 import { LandmarkSmoother } from '../../lib/math/oneEuroFilter';
 import { computeAllJointAngles, JOINT_DEFS } from '../biomechanics/jointAngles';
@@ -19,6 +21,7 @@ import { LM, type NormalizedLandmark, type PoseDetection } from '../pose/poseTyp
 export interface EngineRefs {
   video: HTMLVideoElement | null;
   provider: MediaPipePoseProvider | null;
+  e2eSource: { name: string } | null;
   tracker: SubjectTracker;
   running: boolean;
   ready: boolean;
@@ -28,7 +31,7 @@ export interface EngineRefs {
 }
 
 export const engineRefs: EngineRefs = {
-  video: null, provider: null, tracker: new SubjectTracker(),
+  video: null, provider: null, e2eSource: null, tracker: new SubjectTracker(),
   running: false, ready: false, error: null, demoMode: false, demoT: 0,
 };
 
@@ -221,6 +224,7 @@ export function useMotionEngine(videoRef: React.RefObject<HTMLVideoElement | nul
   void _canvasRef;
   const raf = useRef(0);
   const lastInfer = useRef(0);
+  const e2eRef = useRef<{ detection: (now: number) => import('../pose/poseTypes').PoseDetection } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -231,7 +235,11 @@ export function useMotionEngine(videoRef: React.RefObject<HTMLVideoElement | nul
       const now = sessionClock.now();
       const t0 = performance.now();
       try {
-        if (engineRefs.demoMode) {
+        const e2e = e2eRef.current?.detection(now);
+        if (e2e) {
+          processDetections([e2e], now);
+          perfMonitor.markInference();
+        } else if (engineRefs.demoMode) {
           engineRefs.demoT = now;
           const lms = demoLandmarks(now);
           const det: PoseDetection = {
@@ -262,6 +270,30 @@ export function useMotionEngine(videoRef: React.RefObject<HTMLVideoElement | nul
     };
 
     const init = async () => {
+      // TEST-ONLY path: honored only in dev builds or VITE_E2E_MODE=true.
+      // Production builds ignore ?e2ePose entirely (see SyntheticPoseSource).
+      const e2eSource = getE2EPoseSource();
+      if (e2eSource) {
+        e2eSource.setGateReader(() => {
+          const f = useFocus.getState();
+          if (f.phase === 'assessment-complete') return 'done';
+          if ((f.phase === 'ready' || f.phase === 'ready-next') && f.trials.length <= f.trialIndex) {
+            const tag = f.trials.length < f.trialIndex ? `ready:${f.trials.length}` : `ready:${f.trialIndex}`;
+            return tag;
+          }
+          if (f.phase === 'recording' || f.phase === 'validating') {
+            return `${f.phase}:${f.trialIndex}`;
+          }
+          return `${f.phase}:${f.trialIndex}`;
+        });
+        engineRefs.e2eSource = e2eSource;
+        e2eRef.current = e2eSource;
+        engineRefs.demoMode = false;
+        engineRefs.ready = true;
+        engineRefs.running = true;
+        raf.current = requestAnimationFrame(loop);
+        return;
+      }
       try {
         const provider = new MediaPipePoseProvider();
         await provider.initialize({ numPoses: 3 });

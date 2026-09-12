@@ -48,6 +48,11 @@ export default function CameraCapture() {
       <video ref={videoRef} playsInline muted className="hidden" aria-hidden />
       <MotionCanvas videoRef={videoRef} />
       <div className="pointer-events-none absolute left-3 top-12 flex flex-col gap-1.5">
+        {engineRefs.e2eSource ? (
+          <span className="rounded border border-violet-400/50 bg-black/70 px-2 py-1 text-[10px] font-semibold tracking-widest text-violet-300">
+            E2E TEST INPUT · NOT A PATIENT MEASUREMENT
+          </span>
+        ) : null}
         {engineRefs.demoMode || camError ? (
           <span className="rounded border border-amber-400/40 bg-black/70 px-2 py-1 text-[10px] font-semibold tracking-widest text-amber-300">
             SYNTHETIC SUBJECT · NO CAMERA SIGNAL
