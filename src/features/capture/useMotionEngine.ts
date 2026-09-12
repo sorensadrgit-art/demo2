@@ -181,7 +181,17 @@ export function processDetections(detections: PoseDetection[], now: number) {
       kneeValid: all.leftKnee.valid && all.rightKnee.valid,
       t: now,
     });
-    if (flags.length) st.set({ compensations: [...st.compensations.slice(-20), ...flags] });
+    if (flags.length) {
+      // Deduplicate: one active flag per rule — refresh the existing entry
+      // instead of appending an identical alert every frame.
+      const next = [...st.compensations];
+      for (const f of flags) {
+        const i = next.findIndex((c) => c.id === f.id);
+        if (i >= 0) next[i] = f;
+        else next.push(f);
+      }
+      st.set({ compensations: next.slice(-20) });
+    }
   }
 
   // Estimated kinetics (visually distinct downstream; never Newtons-measured).
