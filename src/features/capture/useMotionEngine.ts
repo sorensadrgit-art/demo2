@@ -42,6 +42,33 @@ const angleHistory = new Map<string, Array<{ t: number; angle: number }>>();
 const velHistory = new Map<string, Array<{ t: number; vel: number }>>();
 const posHistory = new Map<number, { x: number; y: number; t: number }>();
 
+/**
+ * Dev/E2E-only identity observability (never in production): the dual-person
+ * acceptance test reads active-patient continuity without touching product
+ * state. Production builds leave window.__kinelabIdentity unset.
+ */
+export interface IdentityProbe {
+  activeId: number | null;
+  state: string;
+  idSwitches: number;
+  samples: number;
+}
+function e2eIdentityHook(activeId: number | null, state: string, idSwitches: number) {
+  if (typeof window === 'undefined') return;
+  if (import.meta.env.PROD && import.meta.env.VITE_E2E_MODE !== 'true') return;
+  const w = window as unknown as { __kinelabIdentity?: IdentityProbe };
+  const prev = w.__kinelabIdentity;
+  w.__kinelabIdentity = {
+    activeId, state, idSwitches, samples: (prev?.samples ?? 0) + 1,
+  };
+}
+
+/** Read the current identity probe (tests only; null in production). */
+export function readIdentityProbe(): IdentityProbe | null {
+  if (typeof window === 'undefined') return null;
+  return (window as unknown as { __kinelabIdentity?: IdentityProbe }).__kinelabIdentity ?? null;
+}
+
 function demoLandmarks(t: number): NormalizedLandmark[] {
   // Synthetic squat-like motion for environments without a camera/model.
   const ph = (t / 2600) * Math.PI * 2;
@@ -78,9 +105,18 @@ export function processDetections(detections: PoseDetection[], now: number) {
 
   if (!active) {
     updateFrame({ landmarks: null, level: 'suspended' });
-    st.set({ liveAngle: NaN, liveVel: NaN, liveLevel: 'suspended', liveReasons: track.state === 'lost' ? ['TARGET LOST'] : ['NO SUBJECT SELECTED'] });
+    const reasons = track.state === 'lost'
+      ? ['TARGET LOST']
+      : track.cue === 'clear-area'
+        ? ['Clear measurement area']
+        : track.cue === 'step-into-position'
+          ? ['Patient: step into measurement position']
+          : ['NO SUBJECT SELECTED'];
+    st.set({ liveAngle: NaN, liveVel: NaN, liveLevel: 'suspended', liveReasons: reasons });
+    e2eIdentityHook(track.activeId, track.state, track.idSwitches);
     return;
   }
+  e2eIdentityHook(track.activeId, track.state, track.idSwitches);
 
   // Temporal smoothing (One Euro) on the active subject.
   const flat: number[] = [];
@@ -224,7 +260,7 @@ export function useMotionEngine(videoRef: React.RefObject<HTMLVideoElement | nul
   void _canvasRef;
   const raf = useRef(0);
   const lastInfer = useRef(0);
-  const e2eRef = useRef<{ detection: (now: number) => import('../pose/poseTypes').PoseDetection } | null>(null);
+  const e2eRef = useRef<{ detection: (now: number) => import('../pose/poseTypes').PoseDetection; detections?: (now: number) => import('../pose/poseTypes').PoseDetection[] } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -235,30 +271,36 @@ export function useMotionEngine(videoRef: React.RefObject<HTMLVideoElement | nul
       const now = sessionClock.now();
       const t0 = performance.now();
       try {
-        const e2e = e2eRef.current?.detection(now);
-        if (e2e) {
-          processDetections([e2e], now);
+        const e2eList = e2eRef.current?.detections?.(now);
+        if (e2eList) {
+          processDetections(e2eList, now);
           perfMonitor.markInference();
-        } else if (engineRefs.demoMode) {
-          engineRefs.demoT = now;
-          const lms = demoLandmarks(now);
-          const det: PoseDetection = {
-            landmarks: lms, score: 0.92,
-            bbox: { x: 0.28, y: 0.08, w: 0.44, h: 0.84 },
-            timestamp: now,
-          };
-          processDetections([det], now);
-          perfMonitor.markInference();
-        } else if (engineRefs.provider && engineRefs.video && engineRefs.video.readyState >= 2) {
-          if (now - lastInfer.current > 66) { // ~15-30 Hz inference cap
-            lastInfer.current = now;
-            const frame = await engineRefs.provider.detect(engineRefs.video, now);
+        } else {
+          const e2e = e2eRef.current?.detection(now);
+          if (e2e) {
+            processDetections([e2e], now);
             perfMonitor.markInference();
-            processDetections(frame.detections, now);
+          } else if (engineRefs.demoMode) {
+            engineRefs.demoT = now;
+            const lms = demoLandmarks(now);
+            const det: PoseDetection = {
+              landmarks: lms, score: 0.92,
+              bbox: { x: 0.28, y: 0.08, w: 0.44, h: 0.84 },
+              timestamp: now,
+            };
+            processDetections([det], now);
+            perfMonitor.markInference();
+          } else if (engineRefs.provider && engineRefs.video && engineRefs.video.readyState >= 2) {
+            if (now - lastInfer.current > 66) { // ~15-30 Hz inference cap
+              lastInfer.current = now;
+              const frame = await engineRefs.provider.detect(engineRefs.video, now);
+              perfMonitor.markInference();
+              processDetections(frame.detections, now);
+            }
+          } else if (!engineRefs.provider && !engineRefs.demoMode) {
+            // No provider yet — run demo synthesis so the lab is alive.
+            engineRefs.demoMode = true;
           }
-        } else if (!engineRefs.provider && !engineRefs.demoMode) {
-          // No provider yet — run demo synthesis so the lab is alive.
-          engineRefs.demoMode = true;
         }
       } catch (e) {
         engineRefs.error = e instanceof Error ? e.message : 'Inference failed';
@@ -309,19 +351,24 @@ export function useMotionEngine(videoRef: React.RefObject<HTMLVideoElement | nul
     };
     void init();
 
-    // Auto-select the first detected subject if none locked (demo convenience).
-    const autoSelect = setInterval(() => {
-      const st = useSession.getState();
-      if (st.activeSubjectId === null && frameStore.candidates.length > 0) {
-        engineRefs.tracker.selectSubject(frameStore.candidates[0].id, sessionClock.now());
-        useSession.getState().set({ activeSubjectId: frameStore.candidates[0].id });
+    // Identity release: the manager holds the sticky lock; React only mirrors
+    // it. On assessment reset / deliberate patient change the lock is dropped.
+    // (Previous index-0 instant-grab removed: acquisition is scored +
+    // stability-gated inside PatientIdentityManager.)
+    const identitySync = setInterval(() => {
+      const f = useFocus.getState();
+      if (f.phase === 'patient' || f.phase === 'assessment') {
+        if (engineRefs.tracker.activePatientId !== null) {
+          engineRefs.tracker.clearSelection();
+          useSession.getState().set({ activeSubjectId: null });
+        }
       }
     }, 500);
 
     return () => {
       cancelled = true;
       cancelAnimationFrame(raf.current);
-      clearInterval(autoSelect);
+      clearInterval(identitySync);
       engineRefs.running = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

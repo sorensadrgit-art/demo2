@@ -47,6 +47,11 @@ export default function FocusTreatment() {
   const trialNo = Math.min(f.trialIndex + 1, crit.trialCount);
   const busy = f.phase === 'recording' || f.phase === 'validating';
   const actionable = f.blockers.length > 0 && (f.phase === 'positioning' || f.phase === 'ready-next');
+  // Zero-chrome clinical capture: during the measurement window the camera
+  // owns the workspace — rail, ROM dashboard and lock/confidence chrome move
+  // off the capture surface (the angle lives on the patient overlay).
+  const minimalCapture = f.phase === 'ready' || f.phase === 'recording'
+    || f.phase === 'validating' || f.phase === 'ready-next' || f.phase === 'trial-complete';
 
   const manualStart = () => {
     // Manual override: the orchestrator opens the trial window on next tick.
@@ -63,17 +68,21 @@ export default function FocusTreatment() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Minimal top bar: patient · assessment · trial · lock · confidence */}
+      {/* Minimal top bar: patient · assessment · trial (lock/confidence live on the patient overlay, not as chrome) */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-white/10 bg-black/60 px-4 py-2 text-[12px]" aria-live="polite">
         <span className="font-extrabold tracking-wide text-slate-100">{patient.name}</span>
         <span className="tracking-widest text-sky-300">{protocol.name.toUpperCase()}{!protocol.bilateral ? ` · ${f.side.toUpperCase()}` : ''}</span>
         <span className="font-mono text-slate-400">TRIAL {trialNo}/{crit.trialCount}</span>
-        <span className={`font-bold tracking-widest ${tracking === 'locked' ? 'text-emerald-300' : tracking === 'reacquiring' ? 'text-amber-300' : 'text-rose-300'}`}>
-          {trackingLabel}
-        </span>
-        <span className="font-mono" style={{ color: confStyle.color }}>
-          {liveLevel === 'suspended' ? 'SUSPENDED' : `${Math.round((liveLevel === 'high' ? 0.92 : liveLevel === 'moderate' ? 0.72 : 0.45) * 100)}%`}
-        </span>
+        {!minimalCapture && (
+          <>
+            <span className={`font-bold tracking-widest ${tracking === 'locked' ? 'text-emerald-300' : tracking === 'reacquiring' ? 'text-amber-300' : 'text-rose-300'}`}>
+              {trackingLabel}
+            </span>
+            <span className="font-mono" style={{ color: confStyle.color }}>
+              {liveLevel === 'suspended' ? 'SUSPENDED' : `${Math.round((liveLevel === 'high' ? 0.92 : liveLevel === 'moderate' ? 0.72 : 0.45) * 100)}%`}
+            </span>
+          </>
+        )}
         <span className="ml-auto hidden items-center gap-2 text-[11px] text-slate-500 sm:flex">
           <span>{localOnly ? 'Local processing' : 'Cloud sync on'}</span>
           <button
@@ -86,7 +95,7 @@ export default function FocusTreatment() {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        {/* Live patient canvas: ~78% */}
+        {/* Live patient canvas: nearly the entire clinical workspace in capture */}
         <main className="relative min-h-[52vh] flex-1 lg:min-h-0 lg:basis-[78%]" aria-label="Live patient">
           <CameraCapture />
           {/* Patient cue banner */}
@@ -105,9 +114,48 @@ export default function FocusTreatment() {
               </div>
             </div>
           )}
+          {/* Minimal capture controls: trial progress + essential actions stay on the patient */}
+          {minimalCapture && (
+            <div className="absolute bottom-3 left-3 right-3 flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1.5 ring-1 ring-white/15" aria-label="Trial progress">
+                {Array.from({ length: crit.trialCount }).map((_, i) => {
+                  const t = f.trials.find((x) => x.index === i);
+                  return (
+                    <span
+                      key={i}
+                      title={t ? `Trial ${i + 1}: ${t.excursion.toFixed(0)}° ${t.verdict}` : `Trial ${i + 1} pending`}
+                      className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold ring-1 ${
+                        t ? (t.verdict === 'valid' || t.verdict === 'valid-warning' ? 'bg-emerald-500/25 text-emerald-200 ring-emerald-400/40' : 'bg-rose-500/25 text-rose-200 ring-rose-400/40')
+                          : i === f.trialIndex ? 'bg-sky-500/25 text-sky-200 ring-sky-400/40' : 'bg-white/5 text-slate-500 ring-white/10'
+                      }`}
+                    >
+                      {i + 1}
+                    </span>
+                  );
+                })}
+              </div>
+              {f.phase === 'ready' && (
+                <button onClick={manualStart} className="rounded-full bg-sky-500 px-4 py-1.5 text-xs font-extrabold text-white hover:bg-sky-400">
+                  START MANUALLY
+                </button>
+              )}
+              {f.phase === 'recording' && (
+                <button onClick={endTrial} className="rounded-full bg-black/70 px-4 py-1.5 text-xs font-bold tracking-widest text-slate-200 ring-1 ring-white/15 hover:bg-white/10">
+                  END TRIAL
+                </button>
+              )}
+              <button
+                onClick={() => useFocus.getState().reset()}
+                className="ml-auto rounded-full bg-black/70 px-3 py-1.5 text-[11px] font-semibold text-slate-400 ring-1 ring-white/10 hover:text-slate-200"
+              >
+                Cancel assessment
+              </button>
+            </div>
+          )}
         </main>
 
-        {/* Clinical assistant rail */}
+        {/* Clinical assistant rail (hidden during capture; Lab keeps every capability) */}
+        {!minimalCapture && (
         <aside className="flex min-h-0 flex-col gap-3 overflow-y-auto border-t border-white/10 bg-[#060b13] p-4 lg:w-[22%] lg:min-w-[240px] lg:border-l lg:border-t-0" aria-label="Clinical assistant">
           <p className="text-[10px] font-bold tracking-[0.24em] text-slate-500">CLINICAL ASSISTANT</p>
           <ReadinessList />
@@ -178,6 +226,7 @@ export default function FocusTreatment() {
             </button>
           </div>
         </aside>
+        )}
       </div>
     </div>
   );

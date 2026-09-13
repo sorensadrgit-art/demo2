@@ -16,10 +16,10 @@ import type { IPoseProvider } from './PoseProvider';
  * (SubjectTracker → smoother → joint angles → plane/confidence →
  * focusMachine gates). Nothing is bypassed.
  */
-export type E2EScenario = 'knee-flexion-full' | 'wrong-plane' | 'missing-knee' | 'trunk-lean';
+export type E2EScenario = 'knee-flexion-full' | 'wrong-plane' | 'missing-knee' | 'trunk-lean' | 'therapist-crossing';
 
 export const E2E_SCENARIOS: readonly E2EScenario[] = [
-  'knee-flexion-full', 'wrong-plane', 'missing-knee', 'trunk-lean',
+  'knee-flexion-full', 'wrong-plane', 'missing-knee', 'trunk-lean', 'therapist-crossing',
 ];
 
 export function e2ePoseRequest(): { scenario: E2EScenario } | null {
@@ -125,7 +125,8 @@ type Step =
   | { kind: 'rest'; ms: number; pose: KneePoseOpts }
   | { kind: 'flex'; ms: number; spec: E2ETrialSpec }
   | { kind: 'wait'; want: string; timeoutMs: number; pose: KneePoseOpts }
-  | { kind: 'trial'; index: number; spec: E2ETrialSpec };
+  | { kind: 'trial'; index: number; spec: E2ETrialSpec }
+  | { kind: 'crossing-trial'; index: number; spec: E2ETrialSpec };
 
 const WAIT_READY_TIMEOUT = 120000;
 
@@ -157,6 +158,18 @@ const LEAN_TRIALS: E2ETrialSpec[] = CLEAN_TRIALS.map((t) => ({ ...t, leanX: 0.06
 export const SCENARIO_SCRIPTS: Record<E2EScenario, Step[]> = {
   'knee-flexion-full': fullScript(CLEAN_TRIALS),
   'trunk-lean': fullScript(LEAN_TRIALS),
+  // Dual-person acceptance: ONE trial. The therapist enters during the
+  // rest beat, crosses THROUGH the patient mid-trial (brief occlusion),
+  // then exits. The orchestrator must complete the trial on the ORIGINAL
+  // patient with zero clicks and zero identity switch.
+  'therapist-crossing': [
+    { kind: 'rest', ms: 3000, pose: E2E_REST_POSE },
+    { kind: 'wait', want: 'enter-ready:0', timeoutMs: WAIT_READY_TIMEOUT, pose: E2E_REST_POSE },
+    { kind: 'crossing-trial', index: 0, spec: CLEAN_TRIALS[1] },
+    { kind: 'rest', ms: 8000, pose: E2E_REST_POSE },
+    { kind: 'wait', want: 'done', timeoutMs: 120000, pose: E2E_REST_POSE },
+    { kind: 'rest', ms: Number.POSITIVE_INFINITY, pose: E2E_REST_POSE },
+  ],
   'wrong-plane': [
     {
       kind: 'rest', ms: Number.POSITIVE_INFINITY,
@@ -232,6 +245,15 @@ export class SyntheticPoseSource implements IPoseProvider {
         this.stepElapsed += dtMs;
         return;
       }
+      if (step.kind === 'crossing-trial') {
+        // Same exit semantics as a trial; the pose (with therapist) is
+        // composed in posesAt(). A single trial keeps the acceptance fast.
+        const m = /^(ready|ready-next|recording|validating):(\d+)$/.exec(gate);
+        const onMine = m !== null && Number(m[2]) === step.index;
+        if (!onMine) { this.stepIdx += 1; this.stepElapsed = 0; continue; }
+        this.stepElapsed += dtMs;
+        return;
+      }
       this.stepElapsed += dtMs;
       if (this.stepElapsed >= step.ms) { this.stepIdx += 1; this.stepElapsed = 0; continue; }
       return;
@@ -248,9 +270,10 @@ export class SyntheticPoseSource implements IPoseProvider {
         flexDeg: flex, vis: step.spec.vis, leanX: step.spec.leanX,
       });
     }
-    if (step.kind === 'trial') {
+    if (step.kind === 'trial' || step.kind === 'crossing-trial') {
       // Repeating cosine with a neutral beat: motion restarts cleanly each
       // cycle so onset always sees a fresh excursion from rest.
+      // (crossing-trial composes its dual-person frame in detections().)
       const t = this.stepElapsed % (step.spec.moveMs + 1200);
       const flex = t < step.spec.moveMs ? cosineFlex(t, step.spec.moveMs, step.spec.peakFlexDeg) : 0;
       return buildKneeFlexionPose({
@@ -258,7 +281,52 @@ export class SyntheticPoseSource implements IPoseProvider {
         flexDeg: flex, vis: step.spec.vis, leanX: step.spec.leanX,
       });
     }
-    return buildKneeFlexionPose(step.pose);
+    if (step.kind === 'rest' || step.kind === 'wait') return buildKneeFlexionPose(step.pose);
+    // Unreachable: 'flex' handled above; kept for exhaustiveness.
+    return buildKneeFlexionPose(E2E_REST_POSE);
+  }
+
+  /**
+   * Full detection list for this frame. Single-person scenarios return one
+   * detection; the crossing scenario returns patient + therapist (with an
+   * occlusion envelope collapsing the patient's visibility mid-crossing).
+   */
+  detections(now: number): PoseDetection[] {
+    if (this.t0 === null) { this.t0 = now; this.lastT = now; }
+    const dt = Math.min(200, Math.max(0, now - this.lastT));
+    this.lastT = now;
+    this.advance(dt);
+    const steps = this.steps();
+    const step = steps[Math.min(this.stepIdx, steps.length - 1)];
+    if (step.kind === 'crossing-trial') {
+      // Choreography over the trial dwell: patient flexes on the repeating
+      // cosine; the therapist walks through once across the whole dwell.
+      const cycle = step.spec.moveMs + 1200;
+      const rep = Math.floor(this.stepElapsed / cycle);
+      const t = this.stepElapsed % cycle;
+      const flex = t < step.spec.moveMs ? cosineFlex(t, step.spec.moveMs, step.spec.peakFlexDeg) : 0;
+      const crossT = Math.min(1, this.stepElapsed / Math.max(1, step.spec.moveMs * 2 + 2400));
+      const occ = crossingOcclusion(crossT);
+      const patient = buildKneeFlexionPose({ ...E2E_REST_POSE, flexDeg: flex, vis: step.spec.vis });
+      if (occ > 0) {
+        // Therapist body blocks the camera: collapse the knee-chain + hip
+        // visibility proportionally (downstream suspends, never switches).
+        const occIdx = [LM.leftKnee, LM.leftAnkle, LM.leftHeel, LM.leftFootIndex, LM.leftHip, LM.rightHip];
+        for (const i of occIdx) {
+          const v = Math.max(0.03, step.spec.vis * (1 - occ));
+          patient[i] = { ...patient[i], visibility: v, presence: v };
+        }
+      }
+      void rep;
+      return [
+        { landmarks: patient, score: 0.92 * (1 - occ * 0.5), bbox: bboxOf(patient), timestamp: now },
+        {
+          landmarks: buildTherapistPose(crossT, 7), score: 0.95,
+          bbox: bboxOf(buildTherapistPose(crossT, 7)), timestamp: now,
+        },
+      ];
+    }
+    return [this.detection(now)];
   }
 
   detection(now: number): PoseDetection {
@@ -276,6 +344,43 @@ export class SyntheticPoseSource implements IPoseProvider {
   ): Promise<PoseFrame> {
     return { timestamp: timestampMs, width: 1280, height: 720, detections: [this.detection(timestampMs)] };
   }
+}
+
+/**
+ * Deterministic therapist body for the dual-person acceptance fixture: a
+ * genuinely different body (taller torso, wider shoulders, distinct gait
+ * phase) walking left → right. `crossT` 0..1 spans the crossing; near 0.5
+ * the therapist occludes the patient.
+ */
+export function buildTherapistPose(crossT: number, seed = 0): NormalizedLandmark[] {
+  const lms = emptyLandmarks();
+  const P = (i: number, x: number, y: number, v = 0.93) => {
+    lms[i] = { x, y, z: 0, visibility: v, presence: v };
+  };
+  const cx = 0.18 + crossT * 0.68 + Math.sin(seed * 1.7 + crossT * 9) * 0.006;
+  const step = Math.sin(seed * 2.3 + crossT * 12) * 0.05;
+  P(LM.nose, cx, 0.07);
+  P(LM.leftEye, cx - 0.012, 0.055); P(LM.rightEye, cx + 0.012, 0.055);
+  P(LM.leftEar, cx - 0.022, 0.062); P(LM.rightEar, cx + 0.022, 0.062);
+  P(LM.leftShoulder, cx - 0.085, 0.20); P(LM.rightShoulder, cx + 0.085, 0.20);
+  P(LM.leftHip, cx - 0.055, 0.42); P(LM.rightHip, cx + 0.055, 0.42);
+  P(LM.leftElbow, cx - 0.095, 0.36); P(LM.rightElbow, cx + 0.095, 0.36);
+  P(LM.leftWrist, cx - 0.10 + step * 0.4, 0.52); P(LM.rightWrist, cx + 0.10 - step * 0.4, 0.52);
+  P(LM.leftIndex, cx - 0.10 + step * 0.4, 0.55); P(LM.rightIndex, cx + 0.10 - step * 0.4, 0.55);
+  P(LM.leftPinky, cx - 0.11 + step * 0.4, 0.545); P(LM.rightPinky, cx + 0.11 - step * 0.4, 0.545);
+  P(LM.leftThumb, cx - 0.09 + step * 0.4, 0.52); P(LM.rightThumb, cx + 0.09 - step * 0.4, 0.52);
+  P(LM.mouthLeft, cx - 0.01, 0.085); P(LM.mouthRight, cx + 0.01, 0.085);
+  P(LM.leftKnee, cx - 0.05 + step, 0.62); P(LM.rightKnee, cx + 0.05 - step, 0.62);
+  P(LM.leftAnkle, cx - 0.055 + step * 1.6, 0.90); P(LM.rightAnkle, cx + 0.055 - step * 1.6, 0.90);
+  P(LM.leftHeel, cx - 0.075 + step * 1.6, 0.92); P(LM.rightHeel, cx + 0.075 - step * 1.6, 0.92);
+  P(LM.leftFootIndex, cx - 0.035 + step * 1.6, 0.92); P(LM.rightFootIndex, cx + 0.035 - step * 1.6, 0.92);
+  return lms;
+}
+
+/** Occlusion envelope: 1 at mid-crossing, 0 at the edges. */
+export function crossingOcclusion(crossT: number): number {
+  const d = Math.abs(crossT - 0.5);
+  return d >= 0.14 ? 0 : 1 - d / 0.14;
 }
 
 let cached: { key: string; src: SyntheticPoseSource } | null = null;
