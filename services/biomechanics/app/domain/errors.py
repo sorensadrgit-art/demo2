@@ -65,3 +65,31 @@ class IKSolveFailed(BiomechanicsError):
 
 class IKHighResidual(BiomechanicsError):
     code = "IK_HIGH_RESIDUAL"
+
+
+class CaptureBundleInvalid(BiomechanicsError):
+    code = "CAPTURE_BUNDLE_INVALID"
+
+
+class CaptureChecksumMismatch(BiomechanicsError):
+    code = "CAPTURE_CHECKSUM_MISMATCH"
+
+
+class CaptureCameraMissing(BiomechanicsError):
+    code = "CAPTURE_CAMERA_MISSING"
+
+
+class CaptureTimestampMismatch(BiomechanicsError):
+    code = "CAPTURE_TIMESTAMP_MISMATCH"
+
+
+class CaptureNotSynchronized(BiomechanicsError):
+    code = "CAPTURE_NOT_SYNCHRONIZED"
+
+
+class CaptureCalibrationMismatch(BiomechanicsError):
+    code = "CAPTURE_CALIBRATION_MISMATCH"
+
+
+class CaptureTooFewCameras(BiomechanicsError):
+    code = "CAPTURE_TOO_FEW_CAMERAS"
