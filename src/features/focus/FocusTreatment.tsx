@@ -3,7 +3,7 @@ import CameraCapture from '../capture/CameraCapture';
 import { useSession } from '../../stores/sessionStore';
 import { usePatients } from '../../stores/patientStore';
 import { useUI } from '../../stores/uiStore';
-import { CONFIDENCE_STYLE, formatAngle } from '../biomechanics/confidence';
+import { formatAngle } from '../biomechanics/confidence';
 import { getProtocol } from './protocols';
 import { useFocus } from './focusStore';
 
@@ -27,7 +27,6 @@ export default function FocusTreatment() {
   const patient = usePatients((s) => s.activePatient());
   const localOnly = useUI((s) => s.localOnly);
   const setSession = useSession((s) => s.set);
-  const tracking = useSession((s) => s.trackingState);
   const liveAngle = useSession((s) => s.liveAngle);
   const liveLevel = useSession((s) => s.liveLevel);
   const protocol = f.protocolId ? getProtocol(f.protocolId) : undefined;
@@ -41,11 +40,8 @@ export default function FocusTreatment() {
 
   if (!protocol || !crit) return null;
 
-  const trackingLabel = tracking === 'locked' ? 'TARGET LOCKED' : tracking === 'reacquiring' ? 'REACQUIRING' : tracking === 'lost' ? 'TARGET LOST' : 'NO LOCK';
-  const confStyle = CONFIDENCE_STYLE[liveLevel];
   const current = f.trials[f.trials.length - 1];
   const trialNo = Math.min(f.trialIndex + 1, crit.trialCount);
-  const busy = f.phase === 'recording' || f.phase === 'validating';
   const actionable = f.blockers.length > 0 && (f.phase === 'positioning' || f.phase === 'ready-next');
   // Zero-chrome clinical capture: during the measurement window the camera
   // owns the workspace — rail, ROM dashboard and lock/confidence chrome move
@@ -68,21 +64,13 @@ export default function FocusTreatment() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Minimal top bar: patient · assessment · trial (lock/confidence live on the patient overlay, not as chrome) */}
+      {/* Zero-chrome top bar: patient · assessment · trial only. Lock state,
+          confidence and readiness live on the patient overlay itself — the
+          attached angle overlay IS the tracking indicator. */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-white/10 bg-black/60 px-4 py-2 text-[12px]" aria-live="polite">
         <span className="font-extrabold tracking-wide text-slate-100">{patient.name}</span>
         <span className="tracking-widest text-sky-300">{protocol.name.toUpperCase()}{!protocol.bilateral ? ` · ${f.side.toUpperCase()}` : ''}</span>
         <span className="font-mono text-slate-400">TRIAL {trialNo}/{crit.trialCount}</span>
-        {!minimalCapture && (
-          <>
-            <span className={`font-bold tracking-widest ${tracking === 'locked' ? 'text-emerald-300' : tracking === 'reacquiring' ? 'text-amber-300' : 'text-rose-300'}`}>
-              {trackingLabel}
-            </span>
-            <span className="font-mono" style={{ color: confStyle.color }}>
-              {liveLevel === 'suspended' ? 'SUSPENDED' : `${Math.round((liveLevel === 'high' ? 0.92 : liveLevel === 'moderate' ? 0.72 : 0.45) * 100)}%`}
-            </span>
-          </>
-        )}
         <span className="ml-auto hidden items-center gap-2 text-[11px] text-slate-500 sm:flex">
           <span>{localOnly ? 'Local processing' : 'Cloud sync on'}</span>
           <button
@@ -98,23 +86,29 @@ export default function FocusTreatment() {
         {/* Live patient canvas: nearly the entire clinical workspace in capture */}
         <main className="relative min-h-[52vh] flex-1 lg:min-h-0 lg:basis-[78%]" aria-label="Live patient">
           <CameraCapture />
-          {/* Patient cue banner */}
-          {f.cue && (
+          {/* Single action cue: during setup phases the cue guides
+              positioning; during capture only when a blocker needs action.
+              During healthy READY/RECORDING the overlay on the patient is
+              the indicator — no banner. */}
+          {f.cue && (!minimalCapture || actionable) && (
             <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2">
-              <div className={`rounded-full px-5 py-2 text-sm font-extrabold tracking-wide shadow-lg ${busy ? 'bg-sky-500/90 text-white' : 'bg-black/75 text-slate-100 ring-1 ring-white/20'}`}>
+              <div className="rounded-full bg-black/75 px-5 py-2 text-sm font-extrabold tracking-wide text-slate-100 shadow-lg ring-1 ring-white/20">
                 {CUE_TEXT[f.cue] ?? f.cue}
               </div>
             </div>
           )}
-          {/* Actionable blocker */}
+          {/* Single actionable warning: at most one instruction, auto-removed
+              when the problem resolves (actionable derives from blockers). */}
           {actionable && f.statusMessage && (
-            <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2">
+            <div className="pointer-events-none absolute bottom-16 left-1/2 -translate-x-1/2">
               <div className="rounded-xl bg-amber-500/90 px-4 py-2 text-sm font-bold text-black shadow-lg">
                 ⚠ {f.statusMessage}
               </div>
             </div>
           )}
-          {/* Minimal capture controls: trial progress + essential actions stay on the patient */}
+          {/* Essential trial controls only: progress + one contextual action.
+              Recording offers Pause + End; Ready offers manual start; the
+              rail handles the rest outside the capture window. */}
           {minimalCapture && (
             <div className="absolute bottom-3 left-3 right-3 flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1.5 ring-1 ring-white/15" aria-label="Trial progress">
@@ -140,9 +134,14 @@ export default function FocusTreatment() {
                 </button>
               )}
               {f.phase === 'recording' && (
-                <button onClick={endTrial} className="rounded-full bg-black/70 px-4 py-1.5 text-xs font-bold tracking-widest text-slate-200 ring-1 ring-white/15 hover:bg-white/10">
-                  END TRIAL
-                </button>
+                <>
+                  <button onClick={() => setSession({ recording: !useSession.getState().recording })} className="rounded-full bg-black/70 px-4 py-1.5 text-xs font-bold tracking-widest text-slate-200 ring-1 ring-white/15 hover:bg-white/10">
+                    PAUSE
+                  </button>
+                  <button onClick={endTrial} className="rounded-full bg-black/70 px-4 py-1.5 text-xs font-bold tracking-widest text-slate-200 ring-1 ring-white/15 hover:bg-white/10">
+                    END TRIAL
+                  </button>
+                </>
               )}
               <button
                 onClick={() => useFocus.getState().reset()}

@@ -65,4 +65,18 @@ describe('ClinicalOverlay', () => {
     expect(d.push(-31)).toBe(1);
     expect(d.push(-32)).toBe(-1);
   });
+
+  it('overlay hides (never migrates) when the knee chain collapses mid-crossing', () => {
+    // Mid-crossing the therapist occludes the patient's knee chain: the
+    // overlay must report hidden so the canvas draws nothing clinical.
+    const lms = buildKneeFlexionPose({ ...E2E_REST_POSE, flexDeg: 45 });
+    for (const i of [23, 25, 27]) {
+      lms[i] = { ...lms[i], visibility: 0.05, presence: 0.05 };
+    }
+    const vis = drawClinicalOverlay(ctx(), 960, 600, {
+      lms, joint: 'leftKnee', angle: 135, vel: 25,
+      level: 'high', jointValid: true, t: 1000,
+    });
+    expect(vis).toBe('hidden');
+  });
 });

@@ -30,7 +30,17 @@ test('focus full assessment completes three trials and selects the best (T2)', a
   await page.screenshot({ path: `test-results/${shot('02-protocol')}` });
 
   // Positioning: the real gates must clear on synthetic input alone.
-  await expect(page.getByText('TARGET LOCKED')).toBeVisible({ timeout: 15000 });
+  // Zero-chrome capture: lock state lives on the patient overlay, not as
+  // text — acquisition is proven by the identity probe reaching locked.
+  // Poll: the probe publishes every engine frame and the engine may still
+  // be starting when the treatment screen first mounts.
+  await expect.poll(async () => page.evaluate(() => (
+    (window as unknown as { __kinelabIdentity?: { state: string } }).__kinelabIdentity?.state ?? null
+  )), { timeout: 20000 }).toBe('locked');
+  const lockProbe = await page.evaluate(() => (
+    (window as unknown as { __kinelabIdentity?: { state: string; activeId: number | null } }).__kinelabIdentity ?? null
+  ));
+  expect(lockProbe!.activeId).not.toBeNull();
   await page.screenshot({ path: `test-results/${shot('03-positioning')}` });
 
   // Readiness: every gate ✓ (lock, calibration, plane, landmark quality).

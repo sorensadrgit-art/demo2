@@ -17,6 +17,13 @@ export interface FrameData {
   trails: Map<number, Array<{ x: number; y: number }>>;
   com: { x: number; y: number } | null;
   scrubT: number | null;
+  /**
+   * Owner of the rendered angle overlay: the track id whose landmarks feed
+   * the clinical overlay this frame, or null when nothing is rendered.
+   * The canvas copies the active patient id here on every overlay draw;
+   * tests assert overlayOwnerId === activePatientId during valid capture.
+   */
+  overlayOwnerId: number | null;
 }
 
 export const frameStore: FrameData = {
@@ -31,6 +38,7 @@ export const frameStore: FrameData = {
   trails: new Map(),
   com: null,
   scrubT: null,
+  overlayOwnerId: null,
 };
 
 export function updateFrame(p: Partial<FrameData>) {

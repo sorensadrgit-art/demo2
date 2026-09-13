@@ -23,8 +23,12 @@ test('missing knee landmarks fail readiness safely', async ({ page }) => {
   await page.getByRole('option', { name: /Rivera/ }).first().click();
   await page.getByRole('button', { name: /Knee Flexion AROM/ }).click();
   await expect(page.getByText('TRIAL 1/3')).toBeVisible();
-  // Occluded knee chain: suspended confidence, never proceeds to Hold still.
-  await expect(page.getByText('SUSPENDED')).toBeVisible({ timeout: 15000 });
+  // Occluded knee chain: confidence suspends — the clinical overlay hides
+  // and the orchestrator never proceeds to Hold still. Zero-chrome capture
+  // surfaces this as ONE actionable warning (never a silent stall, never a
+  // trial). Identity still auto-acquires the single visible subject — the
+  // SAFETY property is that measurement never starts, not that lock fails.
+  await expect(page.getByText('⚠', { exact: false }).first()).toBeVisible({ timeout: 15000 });
   await page.waitForTimeout(5000);
   await expect(page.getByText('Hold still')).not.toBeVisible();
   await expect(page.getByText('Trial 1 complete')).not.toBeVisible();
@@ -34,7 +38,19 @@ test('valid movement fixture progresses past positioning', async ({ page }) => {
   await page.goto('/?e2ePose=synthetic');
   await page.getByRole('option', { name: /Rivera/ }).first().click();
   await page.getByRole('button', { name: /Knee Flexion AROM/ }).click();
-  await expect(page.getByText('TARGET LOCKED')).toBeVisible({ timeout: 15000 });
+  // Zero-chrome capture: lock state lives on the patient overlay, not as
+  // text. Automatic acquisition is proven by the window identity probe
+  // reaching locked with exactly one patient and zero switches. The probe
+  // publishes on every engine frame, so poll for the locked state rather
+  // than snapshotting a single instant (the engine may still be starting).
+  await expect.poll(async () => page.evaluate(() => (
+    (window as unknown as { __kinelabIdentity?: { state: string } }).__kinelabIdentity?.state ?? null
+  )), { timeout: 20000 }).toBe('locked');
+  const probe = await page.evaluate(() => (
+    (window as unknown as { __kinelabIdentity?: { state: string; activeId: number | null; idSwitches: number } }).__kinelabIdentity ?? null
+  ));
+  expect(probe!.activeId).not.toBeNull();
+  expect(probe!.idSwitches).toBe(0);
   await expect(page.getByText('Hold still')).toBeVisible({ timeout: 30000 });
 });
 

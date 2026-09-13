@@ -159,9 +159,11 @@ export const SCENARIO_SCRIPTS: Record<E2EScenario, Step[]> = {
   'knee-flexion-full': fullScript(CLEAN_TRIALS),
   'trunk-lean': fullScript(LEAN_TRIALS),
   // Dual-person acceptance: ONE trial. The therapist enters during the
-  // rest beat, crosses THROUGH the patient mid-trial (brief occlusion),
-  // then exits. The orchestrator must complete the trial on the ORIGINAL
-  // patient with zero clicks and zero identity switch.
+  // rest beat, crosses THROUGH the patient mid-trial (partial occlusion plus
+  // a short full-hide window where ONLY the therapist is visible — high
+  // score, must NOT match), then exits. The trial completes on the ORIGINAL
+  // patient with zero clicks and zero identity switch. The therapist is
+  // deliberately LARGER than the patient so scale alone cannot steal the lock.
   'therapist-crossing': [
     { kind: 'rest', ms: 3000, pose: E2E_REST_POSE },
     { kind: 'wait', want: 'enter-ready:0', timeoutMs: WAIT_READY_TIMEOUT, pose: E2E_REST_POSE },
@@ -300,15 +302,27 @@ export class SyntheticPoseSource implements IPoseProvider {
     const step = steps[Math.min(this.stepIdx, steps.length - 1)];
     if (step.kind === 'crossing-trial') {
       // Choreography over the trial dwell: patient flexes on the repeating
-      // cosine; the therapist walks through once across the whole dwell.
+      // cosine; the therapist walks through once across the whole dwell —
+      // enters, grows LARGER than the patient (closer to camera), crosses
+      // with partial occlusion, fully hides the patient briefly (therapist
+      // alone in frame at high score — must NOT match), then exits and the
+      // patient is reacquired. The dwell is gate-driven, so a mid-trial
+      // suspension only pauses measurement; completion follows on recovery.
       const cycle = step.spec.moveMs + 1200;
       const rep = Math.floor(this.stepElapsed / cycle);
       const t = this.stepElapsed % cycle;
       const flex = t < step.spec.moveMs ? cosineFlex(t, step.spec.moveMs, step.spec.peakFlexDeg) : 0;
       const crossT = Math.min(1, this.stepElapsed / Math.max(1, step.spec.moveMs * 2 + 2400));
       const occ = crossingOcclusion(crossT);
+      const fullHide = crossT > 0.44 && crossT < 0.56;
       const patient = buildKneeFlexionPose({ ...E2E_REST_POSE, flexDeg: flex, vis: step.spec.vis });
-      if (occ > 0) {
+      if (fullHide) {
+        // Patient fully behind the therapist: collapse ALL visibility so the
+        // pipeline must suspend (never hand the overlay to the therapist).
+        for (const l of patient) {
+          l.visibility = 0.02; l.presence = 0.02;
+        }
+      } else if (occ > 0) {
         // Therapist body blocks the camera: collapse the knee-chain + hip
         // visibility proportionally (downstream suspends, never switches).
         const occIdx = [LM.leftKnee, LM.leftAnkle, LM.leftHeel, LM.leftFootIndex, LM.leftHip, LM.rightHip];
@@ -318,11 +332,19 @@ export class SyntheticPoseSource implements IPoseProvider {
         }
       }
       void rep;
+      const therapistScale = 1.35; // physically closer/larger than the patient
+      const therapist = buildTherapistPose(crossT, 7, therapistScale);
+      if (fullHide) {
+        // Only the therapist is visible: high score, Must-Not-Match.
+        return [
+          { landmarks: therapist, score: 0.96, bbox: bboxOf(therapist), timestamp: now },
+        ];
+      }
       return [
         { landmarks: patient, score: 0.92 * (1 - occ * 0.5), bbox: bboxOf(patient), timestamp: now },
         {
-          landmarks: buildTherapistPose(crossT, 7), score: 0.95,
-          bbox: bboxOf(buildTherapistPose(crossT, 7)), timestamp: now,
+          landmarks: therapist, score: 0.95,
+          bbox: bboxOf(therapist), timestamp: now,
         },
       ];
     }
@@ -352,28 +374,30 @@ export class SyntheticPoseSource implements IPoseProvider {
  * phase) walking left → right. `crossT` 0..1 spans the crossing; near 0.5
  * the therapist occludes the patient.
  */
-export function buildTherapistPose(crossT: number, seed = 0): NormalizedLandmark[] {
+export function buildTherapistPose(crossT: number, seed = 0, bodyScale = 1): NormalizedLandmark[] {
   const lms = emptyLandmarks();
   const P = (i: number, x: number, y: number, v = 0.93) => {
     lms[i] = { x, y, z: 0, visibility: v, presence: v };
   };
   const cx = 0.18 + crossT * 0.68 + Math.sin(seed * 1.7 + crossT * 9) * 0.006;
   const step = Math.sin(seed * 2.3 + crossT * 12) * 0.05;
-  P(LM.nose, cx, 0.07);
-  P(LM.leftEye, cx - 0.012, 0.055); P(LM.rightEye, cx + 0.012, 0.055);
-  P(LM.leftEar, cx - 0.022, 0.062); P(LM.rightEar, cx + 0.022, 0.062);
-  P(LM.leftShoulder, cx - 0.085, 0.20); P(LM.rightShoulder, cx + 0.085, 0.20);
-  P(LM.leftHip, cx - 0.055, 0.42); P(LM.rightHip, cx + 0.055, 0.42);
-  P(LM.leftElbow, cx - 0.095, 0.36); P(LM.rightElbow, cx + 0.095, 0.36);
-  P(LM.leftWrist, cx - 0.10 + step * 0.4, 0.52); P(LM.rightWrist, cx + 0.10 - step * 0.4, 0.52);
-  P(LM.leftIndex, cx - 0.10 + step * 0.4, 0.55); P(LM.rightIndex, cx + 0.10 - step * 0.4, 0.55);
-  P(LM.leftPinky, cx - 0.11 + step * 0.4, 0.545); P(LM.rightPinky, cx + 0.11 - step * 0.4, 0.545);
-  P(LM.leftThumb, cx - 0.09 + step * 0.4, 0.52); P(LM.rightThumb, cx + 0.09 - step * 0.4, 0.52);
-  P(LM.mouthLeft, cx - 0.01, 0.085); P(LM.mouthRight, cx + 0.01, 0.085);
-  P(LM.leftKnee, cx - 0.05 + step, 0.62); P(LM.rightKnee, cx + 0.05 - step, 0.62);
-  P(LM.leftAnkle, cx - 0.055 + step * 1.6, 0.90); P(LM.rightAnkle, cx + 0.055 - step * 1.6, 0.90);
-  P(LM.leftHeel, cx - 0.075 + step * 1.6, 0.92); P(LM.rightHeel, cx + 0.075 - step * 1.6, 0.92);
-  P(LM.leftFootIndex, cx - 0.035 + step * 1.6, 0.92); P(LM.rightFootIndex, cx + 0.035 - step * 1.6, 0.92);
+  const ax = (dx: number) => cx + dx * bodyScale;
+  const ay = (y: number, anchor = 0.42) => anchor + (y - anchor) * bodyScale;
+  P(LM.nose, cx, ay(0.07));
+  P(LM.leftEye, ax(-0.012), ay(0.055)); P(LM.rightEye, ax(0.012), ay(0.055));
+  P(LM.leftEar, ax(-0.022), ay(0.062)); P(LM.rightEar, ax(0.022), ay(0.062));
+  P(LM.leftShoulder, ax(-0.085), ay(0.20)); P(LM.rightShoulder, ax(0.085), ay(0.20));
+  P(LM.leftHip, ax(-0.055), 0.42); P(LM.rightHip, ax(0.055), 0.42);
+  P(LM.leftElbow, ax(-0.095), ay(0.36)); P(LM.rightElbow, ax(0.095), ay(0.36));
+  P(LM.leftWrist, ax(-0.10) + step * 0.4, ay(0.52)); P(LM.rightWrist, ax(0.10) - step * 0.4, ay(0.52));
+  P(LM.leftIndex, ax(-0.10) + step * 0.4, ay(0.55)); P(LM.rightIndex, ax(0.10) - step * 0.4, ay(0.55));
+  P(LM.leftPinky, ax(-0.11) + step * 0.4, ay(0.545)); P(LM.rightPinky, ax(0.11) - step * 0.4, ay(0.545));
+  P(LM.leftThumb, ax(-0.09) + step * 0.4, ay(0.52)); P(LM.rightThumb, ax(0.09) - step * 0.4, ay(0.52));
+  P(LM.mouthLeft, ax(-0.01), ay(0.085)); P(LM.mouthRight, ax(0.01), ay(0.085));
+  P(LM.leftKnee, ax(-0.05) + step, ay(0.62)); P(LM.rightKnee, ax(0.05) - step, ay(0.62));
+  P(LM.leftAnkle, ax(-0.055) + step * 1.6, ay(0.90)); P(LM.rightAnkle, ax(0.055) - step * 1.6, ay(0.90));
+  P(LM.leftHeel, ax(-0.075) + step * 1.6, ay(0.92)); P(LM.rightHeel, ax(0.075) - step * 1.6, ay(0.92));
+  P(LM.leftFootIndex, ax(-0.035) + step * 1.6, ay(0.92)); P(LM.rightFootIndex, ax(0.035) - step * 1.6, ay(0.92));
   return lms;
 }
 

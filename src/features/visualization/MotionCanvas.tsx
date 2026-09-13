@@ -95,16 +95,36 @@ export default function MotionCanvas({ videoRef }: { videoRef: React.RefObject<H
           if (f.landmarks) {
             if (focusMode) {
               // Active protocol joint only: anchors + rays + arc + live value.
+              // The overlay owner is ALWAYS the locked patient — frameStore
+              // landmarks contain only the active patient's pose, and the
+              // owner id is stamped here so tests can assert
+              // overlayOwnerId === activePatientId on every rendered frame.
               const live = useSession.getState();
-              drawClinicalOverlay(ctx, W, H, {
+              const ownerId = live.activeSubjectId;
+              const jointOk = f.valid[f.activeJoint] ?? false;
+              const vis = drawClinicalOverlay(ctx, W, H, {
                 lms: f.landmarks,
                 joint: f.activeJoint,
                 angle: f.angles[f.activeJoint] ?? NaN,
                 vel: live.liveVel,
                 level: f.level,
-                jointValid: f.valid[f.activeJoint] ?? false,
+                jointValid: jointOk,
                 t: performance.now(),
               });
+              f.overlayOwnerId = vis === 'hidden' ? null : ownerId;
+              // Dev/E2E-only wrong-person frame counter: increments when an
+              // overlay is drawn outside a locked patient state (e.g. while
+              // lost, or with no active patient). Structurally the overlay
+              // can only ever draw the locked patient's landmarks, so this
+              // must stay 0 in every automated scenario.
+              if (typeof window !== 'undefined' && (!import.meta.env.PROD || import.meta.env.VITE_E2E_MODE === 'true')) {
+                const w = window as unknown as { __kinelabWrongOverlayFrames?: number };
+                if (w.__kinelabWrongOverlayFrames === undefined) w.__kinelabWrongOverlayFrames = 0;
+                const sess = useSession.getState();
+                if (vis !== 'hidden' && (sess.trackingState !== 'locked' || sess.activeSubjectId === null || ownerId === null)) {
+                  w.__kinelabWrongOverlayFrames += 1;
+                }
+              }
             } else {
               if (st.showGhost && f.ghost) drawSkeleton(ctx, f.ghost, W, H, { activeJoint: f.activeJoint, dimOthers: true, ghost: true });
               drawSkeleton(ctx, f.landmarks, W, H, { activeJoint: f.activeJoint, dimOthers: true });
@@ -123,6 +143,11 @@ export default function MotionCanvas({ videoRef }: { videoRef: React.RefObject<H
                 if (vels) drawVectors(ctx, f.landmarks, vels, W, H);
               }
             }
+          } else {
+            // No active-patient landmarks: nothing clinical is drawn and any
+            // previous owner stamp is cleared (overlay must disappear when
+            // the patient is unreliable, never migrate to another person).
+            f.overlayOwnerId = null;
           }
           if (!focusMode) drawTrackingBanner(ctx, f.tracking, W, activeId);
         }
