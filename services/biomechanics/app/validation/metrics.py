@@ -58,13 +58,20 @@ def icc_3_1(targets: list[list[float]]) -> float:
     return float((ms_rows - ms_err) / (ms_rows + (k - 1) * ms_err))
 
 
+def _safe(value):
+    if isinstance(value, float) and (value != value or value in (float("inf"), float("-inf"))):
+        return None
+    return value
+
+
 def full_report(kinelab: list[float], reference: list[float], unit: str) -> dict:
+    ba = bland_altman(kinelab, reference)
     return {
         "unit": unit,
         "n": len(kinelab),
         "mae": mae(kinelab, reference),
         "rmse": rmse(kinelab, reference),
         "bias": bias(kinelab, reference),
-        "pearsonR": pearson_r(kinelab, reference),
-        "blandAltman": bland_altman(kinelab, reference),
+        "pearsonR": _safe(pearson_r(kinelab, reference)),
+        "blandAltman": {k: _safe(v) for k, v in ba.items()},
     }
