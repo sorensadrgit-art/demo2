@@ -85,6 +85,15 @@ def main() -> int:
 
     model = opensim.Model(args.model)
     mset = model.updMarkerSet()
+    # V4: model markers attach at anatomical stations matching the data-side
+    # marker placement. KINELAB_IK_ATTACH_JSON maps marker name -> [x,y,z]
+    # offset (meters, body frame). Absent a station entry the marker falls
+    # back to the body origin (legacy V3 behavior, kept for bias comparison).
+    import json as _json
+    try:
+        stations = _json.loads(os.environ.get("KINELAB_IK_ATTACH_JSON", "{}"))
+    except Exception:  # noqa: BLE001
+        stations = {}
     for mname in names:
         body_name = MARKER_TO_BODY.get(mname)
         if body_name is None or not model.getBodySet().contains(body_name):
@@ -92,7 +101,8 @@ def main() -> int:
         mk = opensim.Marker()
         mk.setName(mname)
         mk.setParentFrame(model.getBodySet().get(body_name))
-        mk.set_location(opensim.Vec3(0, 0, 0))
+        off = stations.get(mname)
+        mk.set_location(opensim.Vec3(*off) if off else opensim.Vec3(0, 0, 0))
         mset.adoptAndAppend(mk)
     model.finalizeFromProperties()
     model.initSystem()
