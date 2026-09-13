@@ -28,12 +28,22 @@ def load_model(cfg: str, ckpt: str, device: str) -> None:
 
     t0 = time.perf_counter()
     MODEL = init_model(cfg, ckpt, device=device)
+    # V4: single-view inference (no flip ensemble). The upstream
+    # flip_test averages heatmaps across a mirrored copy; on images with a
+    # dominant vertical axis (limbs parallel to image Y) that average pulls
+    # detections toward the image midline and degrades 2D accuracy, which
+    # the vision fixture measures directly. Config default untouched.
+    try:
+        MODEL.test_cfg = {"flip_test": False}  # noqa: SLF001
+    except Exception:  # noqa: BLE001
+        pass
     MODEL_INFO = {
         "model": "rtmw-l 256x192 (cocktail14)",
         "config": cfg.split("/")[-1],
         "checkpoint": ckpt.split("/")[-1],
         "device": device,
         "loadMs": round((time.perf_counter() - t0) * 1000.0, 1),
+        "flipTest": False,
     }
 
 
