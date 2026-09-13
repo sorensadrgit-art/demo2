@@ -1,6 +1,9 @@
 """RTMW pose worker: local HTTP worker over the isolated kinelab-rtmw venv.
 
-Runs ONLY inside services/biomechanics/runtime/kinelab-rtmw/bin/python.
+Runs ONLY inside services/biomechanics/runtime/kinelab-rtmw/bin/python
+(provisioned by services/biomechanics/scripts/provision_rtmw.sh; the
+vendored services/biomechanics/runtime/rtmw_compat/mmdet stub ships with
+the repo and is exposed via a .pth file, so no PYTHONPATH is needed).
 Loads RTMW-L once, serves POST /infer {imageB64, patientRoi?, cameraId,
 timestampMs} -> 133 keypoints mapped to KineLab schema.
 

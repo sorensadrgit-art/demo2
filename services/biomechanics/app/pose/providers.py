@@ -69,6 +69,7 @@ class RTMWPoseProvider:
         try:
             import torch  # noqa: F401
             import mmpose  # noqa: F401
+            import mmdet  # noqa: F401  (vendored stub; see runtime/rtmw_compat)
 
             return {"rtmw": True, "reason": None}
         except Exception as e:  # noqa: BLE001

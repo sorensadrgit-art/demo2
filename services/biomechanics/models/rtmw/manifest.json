@@ -1,1 +1,24 @@
-{"checkpointFilename":"rtmw-l_256x192.pth","checkpointSha256":"ae6459e54e52e7d43d82531728165379cac4d05803944a8af3e69dec0b6af792","checkpointSizeBytes":229686801,"checkpointSource":"https://download.openmmlab.com/mmpose/v1/projects/rtmw/rtmw-dw-x-l_simcc-cocktail14_270e-256x192-20231122.pth","configFile":"rtmw-l_8xb1024-270e_cocktail14-256x192.py","configSource":"https://github.com/open-mmlab/mmpose/blob/v1.3.2/configs/wholebody_2d_keypoint/rtmpose/cocktail14/rtmw-l_8xb1024-270e_cocktail14-256x192.py","inputSize":[256,192],"keypointCount":133,"keypointOrdering":"body 0-16, feet 17-22, face 23-90, left-hand 91-111, right-hand 112-132","license":"CC BY-NC-SA 4.0 (checkpoint, OpenMMLab model zoo terms)","mmcv":"2.2.0 (CPU, torch2.4 build)","mmdet":"3.1.0 (assertion pin relaxed to <2.3.0; detector unused, top-down path)","mmengine":"0.10.7","mmpose":"1.3.2","model":"rtmw-l 256x192 (cocktail14, COCO-WholeBody)","python":"3.11.15 (isolated venv services/biomechanics/runtime/kinelab-rtmw)","runtime":"kinelab-rtmw","torch":"2.4.1+cpu"}
+{
+  "checkpointFilename": "rtmw-l_256x192.pth",
+  "checkpointSha256": "ae6459e54e52e7d43d82531728165379cac4d05803944a8af3e69dec0b6af792",
+  "checkpointSizeBytes": 229686801,
+  "checkpointSource": "https://download.openmmlab.com/mmpose/v1/projects/rtmw/rtmw-dw-x-l_simcc-cocktail14_270e-256x192-20231122.pth",
+  "configFile": "rtmw-l_8xb1024-270e_cocktail14-256x192.py",
+  "configSource": "https://github.com/open-mmlab/mmpose/blob/v1.3.2/configs/wholebody_2d_keypoint/rtmpose/cocktail14/rtmw-l_8xb1024-270e_cocktail14-256x192.py",
+  "inputSize": [
+    256,
+    192
+  ],
+  "keypointCount": 133,
+  "keypointOrdering": "body 0-16, feet 17-22, face 23-90, left-hand 91-111, right-hand 112-132",
+  "license": "CC BY-NC-SA 4.0 (checkpoint, OpenMMLab model zoo terms)",
+  "mmcv": "2.2.0 (CPU, torch2.4 build)",
+  "mmdet": "vendored stub services/biomechanics/runtime/rtmw_compat/mmdet (upstream-identical ConfigType+reduce_mean; no official mmdet release admits mmcv 2.2.0)",
+  "mmengine": "0.10.7",
+  "mmpose": "1.3.2",
+  "model": "rtmw-l 256x192 (cocktail14, COCO-WholeBody)",
+  "python": "3.11.15 (isolated venv services/biomechanics/runtime/kinelab-rtmw)",
+  "runtime": "kinelab-rtmw",
+  "torch": "2.4.1+cpu",
+  "provision": "bash services/biomechanics/scripts/provision_rtmw.sh [--recreate]; lockfile services/biomechanics/runtime/requirements-rtmw.txt"
+}
