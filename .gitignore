@@ -8,3 +8,7 @@ playwright-report/
 __pycache__/
 *.pyc
 services/biomechanics/var/
+services/biomechanics/runtime/kinelab-rtmw/
+services/biomechanics/models/rtmw/*.pth
+services/biomechanics/models/rtmw/*.py
+services/biomechanics/models/opensim/*.osim

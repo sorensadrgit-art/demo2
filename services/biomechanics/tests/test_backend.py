@@ -20,8 +20,9 @@ def test_health_runtime_status():
     body = r.json()
     assert body["status"] == "ok"
     assert body["numpy"] is True and body["scipy"] is True and body["opencv"] is True
-    assert body["rtmw"] is False and body["rtmw_reason"]
-    assert body["opensim"] is False and body["opensim_reason"]
+    # V3: /health reflects LIVE runtimes — True only when real imports/workers answer.
+    assert set(body) >= {"rtmw", "opensim", "precision_runtime"}
+    assert isinstance(body["rtmw"], bool) and isinstance(body["opensim"], bool)
 
 
 def test_segment_length_consistency():
@@ -58,17 +59,25 @@ def test_rtmw_real_inference_or_explicit_block():
 
 def test_opensim_import_or_explicit_block():
     st = opensim_status()
-    assert st["opensim"] is False and "BLOCKED" in st["reason"]
+    # V3: opensim 4.6 installed → live True; without it, explicit BLOCKED reason.
+    assert isinstance(st["opensim"], bool)
+    if st["opensim"]:
+        assert st["reason"] is None
+    else:
+        assert "BLOCKED" in st["reason"]
 
 
 def test_opensim_model_load_or_explicit_block():
-    from app.opensim.runtime import OpenSimRunner
+    from app.opensim.runtime import KINELAB_TO_OPENSIM_MARKERS, OpenSimRunner
 
     try:
         OpenSimRunner()
-        raise AssertionError("should have raised without runtime")
+        # V3: with opensim 4.6 installed the runner constructs; without the
+        # runtime it raises BLOCKED.
     except RuntimeError as e:
         assert "BLOCKED" in str(e)
+    # V3: kinematic chain map present for IK wiring.
+    assert KINELAB_TO_OPENSIM_MARKERS["knee-flexion-l"]["coordinate"] == "knee_angle_l"
 
 
 def test_opensim_ik_fixture_or_explicit_block():
@@ -109,7 +118,7 @@ def test_measurement_provenance_complete():
     m = job["measurement"]
     for key in ("source", "acquisitionGrade", "pipeline", "valueDeg"):
         assert key in m, m
-    assert m["pipeline"] == "kinelab-biomechanics-v2"
+    assert m["pipeline"] == "kinelab-precision-v3"
     assert abs(m["valueDeg"] - 60.0) < 0.5
 
 

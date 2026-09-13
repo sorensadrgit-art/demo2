@@ -3,7 +3,7 @@ import { validateTriangulateResponse, BIOMECHANICS_PIPELINE_VERSION } from '../s
 
 describe('biomechanics client contracts', () => {
   it('pipeline version matches backend', () => {
-    expect(BIOMECHANICS_PIPELINE_VERSION).toBe('kinelab-biomechanics-v2');
+    expect(BIOMECHANICS_PIPELINE_VERSION).toBe('kinelab-precision-v3');
   });
   it('accepts a valid triangulate response', () => {
     const body = {

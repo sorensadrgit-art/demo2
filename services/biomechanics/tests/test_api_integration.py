@@ -86,4 +86,4 @@ def test_api_integration_full_path():
     job = prec.json()
     assert job["state"] == "COMPLETE", job
     assert abs(job["measurement"]["valueDeg"] - 90.0) < 0.5
-    assert job["measurement"]["pipeline"] == "kinelab-biomechanics-v2"
+    assert job["measurement"]["pipeline"] == "kinelab-precision-v3"

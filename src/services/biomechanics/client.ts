@@ -4,7 +4,7 @@
  * before it touches session state. Service is optional: UI must boot
  * and Focus must work with the backend unreachable.
  */
-export const BIOMECHANICS_PIPELINE_VERSION = 'kinelab-biomechanics-v2';
+export const BIOMECHANICS_PIPELINE_VERSION = 'kinelab-precision-v3';
 
 export interface BackendHealth {
   status: string;

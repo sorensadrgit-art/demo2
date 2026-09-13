@@ -1,4 +1,5 @@
-"""Runtime capability probing. /health reflects actual imports, never hardcoded."""
+"""Runtime capability probing. /health reflects actual imports + live worker
+probes, never hardcoded."""
 from __future__ import annotations
 
 import importlib
@@ -28,7 +29,15 @@ def runtime_status() -> dict:
         charuco = aruco is not None and hasattr(aruco, "CharucoBoard")
     except Exception:  # noqa: BLE001
         charuco = False
-    rtmw_ok = torch_ok and mmpose_ok
+    # Live RTMW worker probe: VERIFIED only when the child runtime answers.
+    from .runtime_workers import rtmw_health  # noqa: PLC0415
+
+    worker = rtmw_health()
+    rtmw_ok = bool(worker.get("reachable")) and bool(worker.get("modelLoaded"))
+    rtmw_model = (worker.get("model") or {}).get("model") if rtmw_ok else None
+    if not torch_ok or not mmpose_ok:
+        # main-interpreter torch/mmpose remain absent by design (isolated venv)
+        pass
     return {
         "status": "ok",
         "python": sys.version.split()[0],
@@ -40,7 +49,10 @@ def runtime_status() -> dict:
         "opencv_version": cv_v,
         "charuco": charuco,
         "rtmw": rtmw_ok,
-        "rtmw_reason": None if rtmw_ok else f"torch: {torch_reason}; mmpose: {mmpose_reason}",
+        "rtmw_model": rtmw_model,
+        "rtmw_reason": None if rtmw_ok else f"worker: {worker}; torch: {torch_reason}; mmpose: {mmpose_reason}",
         "opensim": opensim_ok,
         "opensim_reason": None if opensim_ok else str(opensim_reason),
+        "opensim_version": opensim_reason if opensim_ok else None,
+        "precision_runtime": bool(rtmw_ok and opensim_ok),
     }

@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Literal
 from pydantic import BaseModel, Field
 
-PIPELINE_VERSION = "kinelab-biomechanics-v2"
+PIPELINE_VERSION = "kinelab-precision-v3"
 SCHEMA_VERSION = "1.0"
 
 AcquisitionGrade = Literal["precision", "clinical", "solo"]
