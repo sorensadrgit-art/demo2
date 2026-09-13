@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from .api import health, calibration, pipeline as pipeline_mod
 from .api.pipeline import biomechanics, pose, precision, reconstruction, validation
+from .api.precision_v5 import precision_v5
 from .domain.errors import BiomechanicsError
 
 app = FastAPI(title="KineLab Biomechanics", version="2.0.0")
@@ -24,6 +25,7 @@ app.include_router(pose)
 app.include_router(biomechanics)
 app.include_router(validation)
 app.include_router(precision)
+app.include_router(precision_v5)
 
 
 @app.get("/")

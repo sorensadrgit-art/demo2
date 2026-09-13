@@ -65,6 +65,7 @@ def triangulate_weighted(
     min_confidence: float = 0.05,
     outlier_threshold_px: float = 12.0,
     max_reproj_px: float = 25.0,
+    max_reject_rounds: int = 1,
 ) -> TriangulationResult:
     usable = [v for v in views if v.confidence >= min_confidence]
     if len(usable) < min_views:
@@ -74,15 +75,16 @@ def triangulate_weighted(
     point = _dlt(usable)
     resid = _residuals(point, usable)
     rejected: list[str] = []
-    if len(usable) > min_views:
+    for _ in range(max(1, max_reject_rounds)):
+        if len(usable) <= min_views:
+            break
         worst = max(usable, key=lambda v: resid[v.cameraId])
-        if resid[worst.cameraId] > outlier_threshold_px:
-            rejected.append(worst.cameraId)
-            kept = [v for v in usable if v.cameraId != worst.cameraId]
-            if len(kept) >= min_views:
-                point = _dlt(kept)
-                resid = _residuals(point, kept)
-                usable = kept
+        if resid[worst.cameraId] <= outlier_threshold_px:
+            break
+        rejected.append(worst.cameraId)
+        usable = [v for v in usable if v.cameraId != worst.cameraId]
+        point = _dlt(usable)
+        resid = _residuals(point, usable)
     rmse = float(math.sqrt(sum(r * r for r in resid.values()) / max(1, len(resid))))
     if rmse > max_reproj_px:
         from ..domain.errors import TriangulationHighReprojectionError
