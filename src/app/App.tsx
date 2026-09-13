@@ -6,6 +6,7 @@ import SessionReport from '../features/reports/SessionReport';
 import PatientDashboard from '../features/patients/PatientDashboard';
 import SessionComparison from '../features/patients/SessionComparison';
 import BodyScene from '../features/three/BodyScene';
+import AnalysisWorkspace from '../analysis/AnalysisWorkspace';
 import SymmetryPanel from './SymmetryPanel';
 import { useSession } from '../stores/sessionStore';
 import { useUI } from '../stores/uiStore';
@@ -61,6 +62,7 @@ export default function App() {
               onClick={() => set({ appMode: m })}
               className={`rounded px-2.5 py-1 text-[11px] font-bold tracking-widest ${appMode === m ? 'bg-sky-500/25 text-sky-100 ring-1 ring-sky-400/50' : 'text-slate-400 hover:text-slate-200'}`}
               aria-pressed={appMode === m}
+              title={m === 'analysis3d' ? 'Clinical analysis workspace: synchronized review, waveform, 3D, quality inspector' : undefined}
             >
               {label}
             </button>
@@ -102,9 +104,11 @@ export default function App() {
           </div>
         )}
         {appMode === 'analysis3d' && !inFocus && (
-          <div className="h-full p-4">
+          <div className="h-full overflow-y-auto p-4">
             <BackButton />
-            <div className="h-[calc(100%-40px)] rounded-2xl border border-white/10 bg-white/[0.02]"><BodyScene /></div>
+            <div className="min-h-[calc(100%-40px)] rounded-2xl border border-white/10 bg-white/[0.02]">
+              <AnalysisWorkspace />
+            </div>
           </div>
         )}
         {appMode === 'report' && !inFocus && (
