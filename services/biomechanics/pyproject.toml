@@ -1,0 +1,20 @@
+[project]
+name = "kinelab-biomechanics"
+version = "2.0.0"
+description = "KineLab numerical biomechanics backend: calibration, reconstruction, pose, biomechanics, validation"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi==0.141.1",
+  "uvicorn==0.52.4",
+  "pydantic==2.13.5",
+  "numpy==2.5.3",
+  "scipy==1.18.1",
+  "opencv-python-headless==4.12.0.88",
+  "httpx==0.28.1",
+]
+
+[project.optional-dependencies]
+test = ["pytest==9.1.1"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
