@@ -67,3 +67,74 @@ def plausibility_flags(
             if d_prev > 0.05 and d_curr < 0.02:
                 flags.append(f"possible-swap:{left}/{right}")
     return flags
+
+
+# ---------- V5.5 cross-view semantic consistency (P24/P25) ----------
+# Reprojection error alone cannot catch a WRONG point every view agrees on
+# (V5: six views at 2.7px RMSE on a 450mm-wrong ankle). This layer checks
+# the triangulated lower-limb solution against weak anatomical priors that
+# use NO ground truth and NO angle-specific expectations:
+#   - segment-length plausibility (fixture-calibrated reference bands)
+#   - hip -> knee -> ankle topology ordering (knee between hip and ankle)
+#   - bilateral separation (limbs must not collapse onto each other)
+# A solution violating these is flagged "anatomically-rejected" even when
+# its reprojection RMSE is low. Thresholds are deliberately loose (25-40%
+# bands): this is a wrong-structure catcher, not a precision gate.
+
+# Reference segment lengths (m) from the gait2392-derived fixture. A real
+# deployment calibrates these per patient; the benchmark passes them in.
+REFERENCE_SEGMENTS_M: dict[str, float] = {
+    "femur": 0.3958,
+    "tibia": 0.4300,
+}
+
+
+def anatomical_consistency(
+    points: dict[str, tuple[float, float, float] | list[float]],
+    reference: dict[str, float] | None = None,
+    band: float = 0.30,
+    min_inter_limb_m: float = 0.05,
+) -> dict:
+    """Truth-free anatomical check of a triangulated lower-limb solution.
+
+    Returns {"pass": bool, "checks": {...}, "rejections": [...]}.
+    """
+    ref = reference or REFERENCE_SEGMENTS_M
+    checks: dict[str, dict] = {}
+    rejections: list[str] = []
+    P = {k: (float(v[0]), float(v[1]), float(v[2])) for k, v in points.items()}
+
+    for side, (hip, knee, ankle) in (
+        ("r", ("right-hip", "right-knee", "right-ankle")),
+        ("l", ("left-hip", "left-knee", "left-ankle")),
+    ):
+        if all(k in P for k in (hip, knee, ankle)):
+            fem = _dist(P[hip], P[knee])
+            tib = _dist(P[knee], P[ankle])
+            fem_ok = abs(fem - ref["femur"]) <= band * ref["femur"]
+            tib_ok = abs(tib - ref["tibia"]) <= band * ref["tibia"]
+            # topology: knee must lie strictly between hip and ankle along
+            # the chain (both sub-segments shorter than the hip-ankle span
+            # unless the limb is folded past ~150deg flexion, impossible
+            # for a knee).
+            span = _dist(P[hip], P[ankle])
+            topo_ok = (fem < span + 1e-6 and tib < span + 1e-6) or span < 1e-6
+            checks[f"femur-{side}"] = {"lengthM": round(fem, 4), "ok": fem_ok}
+            checks[f"tibia-{side}"] = {"lengthM": round(tib, 4), "ok": tib_ok}
+            checks[f"topology-{side}"] = {"spanM": round(span, 4), "ok": topo_ok}
+            if not fem_ok:
+                rejections.append(f"segment:femur-{side}:{fem:.3f}m")
+            if not tib_ok:
+                rejections.append(f"segment:tibia-{side}:{tib:.3f}m")
+            if not topo_ok:
+                rejections.append(f"topology:knee-not-between-{side}")
+
+    for a, b in (("left-knee", "right-knee"), ("left-ankle", "right-ankle")):
+        if a in P and b in P:
+            d = _dist(P[a], P[b])
+            ok = d >= min_inter_limb_m
+            checks[f"separation:{a}/{b}"] = {"distM": round(d, 4), "ok": ok}
+            if not ok:
+                rejections.append(f"collapse:{a}/{b}:{d:.3f}m")
+
+    return {"pass": not rejections, "checks": checks, "rejections": rejections}

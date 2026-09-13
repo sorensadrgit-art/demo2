@@ -1,0 +1,742 @@
+{
+ "benchmark": "kinelab-perception-v5.5",
+ "seed": 20260913,
+ "angles": [
+  0,
+  15,
+  30,
+  45,
+  60,
+  75,
+  90,
+  105,
+  120
+ ],
+ "nCameras": 8,
+ "fixture": {
+  "handedness": "screen-right = view x up, det(R)=+1",
+  "subjectFaces": "+X (toward cam-01)",
+  "cues": [
+   "L red/R blue limbs",
+   "face front / hair back",
+   "chest side panels",
+   "back logo panel"
+  ],
+  "renderer": "services/biomechanics/runtime/vision_v5.py:render_v5",
+  "truthSource": "pose_body_v5 chain (exact by construction)"
+ },
+ "providerSelection": {
+  "env": "KINELAB_PRECISION_POSE_PROVIDER",
+  "selected": "rtmw-l-256x192",
+  "interface": "services/biomechanics/app/pose_providers.py::PoseBenchmarkProvider",
+  "adapters": {
+   "rtmw-l-256x192": "services/biomechanics/app/providers_rtmw.py::RTMWBenchmarkProvider (worker :8102)",
+   "rtmw-l-384x288": "same adapter, worker :8103 (benchmark only)"
+  },
+  "decision": "RETAIN rtmw-l-256x192 as Precision provider; 384x288 NOT promoted (more swaps at every angle, 1.7x latency, mixed error)"
+ },
+ "v5Reference": {
+  "identityFails": 154,
+  "angleErrMax": 107.69,
+  "angleErrMean": 45.9,
+  "err3dP95mm": 628.4,
+  "note": "rhesus of record: geometry VALIDATED, perception fails"
+ },
+ "viewpointMap": {
+  "perCameraPx": {
+   "cam-01": {
+    "n": 72,
+    "p50": 7.0,
+    "p95": 15.2,
+    "max": 54.7,
+    "swaps": 0
+   },
+   "cam-02": {
+    "n": 62,
+    "p50": 11.3,
+    "p95": 119.7,
+    "max": 152.7,
+    "swaps": 13
+   },
+   "cam-03": {
+    "n": 32,
+    "p50": 61.1,
+    "p95": 175.8,
+    "max": 201.3,
+    "swaps": 19
+   },
+   "cam-04": {
+    "n": 72,
+    "p50": 18.7,
+    "p95": 156.4,
+    "max": 195.4,
+    "swaps": 28
+   },
+   "cam-05": {
+    "n": 72,
+    "p50": 46.0,
+    "p95": 154.7,
+    "max": 199.4,
+    "swaps": 60
+   },
+   "cam-06": {
+    "n": 68,
+    "p50": 17.9,
+    "p95": 145.6,
+    "max": 177.3,
+    "swaps": 15
+   },
+   "cam-07": {
+    "n": 32,
+    "p50": 35.0,
+    "p95": 184.4,
+    "max": 197.2,
+    "swaps": 13
+   },
+   "cam-08": {
+    "n": 72,
+    "p50": 9.1,
+    "p95": 156.8,
+    "max": 193.8,
+    "swaps": 6
+   }
+  },
+  "kneeAnklePx": {
+   "left-knee": {
+    "n": 54,
+    "p50": 11.1,
+    "p95": 41.4,
+    "max": 47.3
+   },
+   "right-knee": {
+    "n": 54,
+    "p50": 17.0,
+    "p95": 41.1,
+    "max": 54.7
+   },
+   "left-ankle": {
+    "n": 66,
+    "p50": 11.9,
+    "p95": 43.0,
+    "max": 70.6
+   },
+   "right-ankle": {
+    "n": 66,
+    "p50": 81.0,
+    "p95": 175.1,
+    "max": 190.6
+   }
+  },
+  "polarity": {
+   "cam-01": "ambiguous",
+   "cam-02": "ambiguous",
+   "cam-03": "ambiguous",
+   "cam-04": "ambiguous",
+   "cam-05": "ambiguous",
+   "cam-06": "ambiguous",
+   "cam-07": "ambiguous",
+   "cam-08": "ambiguous"
+  },
+  "note": "arbitration stays ambiguous: detector never localizes BOTH knees with motion contrast; map uses raw labels"
+ },
+ "confidenceCalibration": {
+  "corrConfErr": -0.316,
+  "rejectionCurve": [
+   {
+    "dropFrac": 0,
+    "confThresh": 0.363,
+    "keepN": 482,
+    "p50": 15.2,
+    "p95": 158.2
+   },
+   {
+    "dropFrac": 0.1,
+    "confThresh": 0.542,
+    "keepN": 433,
+    "p50": 14.6,
+    "p95": 152.3
+   },
+   {
+    "dropFrac": 0.2,
+    "confThresh": 0.613,
+    "keepN": 385,
+    "p50": 13.7,
+    "p95": 137.1
+   },
+   {
+    "dropFrac": 0.3,
+    "confThresh": 0.651,
+    "keepN": 337,
+    "p50": 12.6,
+    "p95": 132.5
+   },
+   {
+    "dropFrac": 0.5,
+    "confThresh": 0.702,
+    "keepN": 243,
+    "p50": 11.2,
+    "p95": 130.3
+   }
+  ],
+  "note": "weak negative correlation; dropping lowest-50% conf only moves p95 158->130px: confidence CANNOT gate swaps"
+ },
+ "wrongButLowReprojection": [
+  {
+   "angle": 0,
+   "angleErrDeg": 1.079,
+   "worst3d": [
+    "left-heel",
+    97.65
+   ],
+   "triRmsePx": {
+    "left-hip": 4.57,
+    "right-hip": 5.68,
+    "left-knee": 3.66,
+    "right-knee": 3.89,
+    "left-ankle": 1.81,
+    "right-ankle": 4.62,
+    "left-heel": 2.62,
+    "left-foot-index": 5.94,
+    "right-foot-index": 2.51
+   }
+  },
+  {
+   "angle": 15,
+   "angleErrDeg": 4.105,
+   "worst3d": [
+    "left-foot-index",
+    119.16
+   ],
+   "triRmsePx": {
+    "left-hip": 3.35,
+    "right-hip": 5.8,
+    "left-knee": 2.0,
+    "right-knee": 3.11,
+    "left-ankle": 4.9,
+    "right-ankle": 3.23,
+    "left-heel": 3.39,
+    "left-foot-index": 5.42,
+    "right-foot-index": 5.36
+   }
+  },
+  {
+   "angle": 30,
+   "angleErrDeg": 8.385,
+   "worst3d": [
+    "right-foot-index",
+    436.51
+   ],
+   "triRmsePx": {
+    "left-hip": 2.39,
+    "right-hip": 5.77,
+    "left-knee": 1.7,
+    "right-knee": 3.47,
+    "left-ankle": 5.33,
+    "right-ankle": 5.85,
+    "left-heel": 5.19,
+    "left-foot-index": 7.17,
+    "right-foot-index": 4.66
+   }
+  },
+  {
+   "angle": 45,
+   "angleErrDeg": 22.086,
+   "worst3d": [
+    "right-ankle",
+    360.32
+   ],
+   "triRmsePx": {
+    "left-hip": 5.32,
+    "right-hip": 4.37,
+    "left-knee": 4.66,
+    "right-knee": 2.94,
+    "left-ankle": 5.21,
+    "right-ankle": 4.65,
+    "left-foot-index": 6.47,
+    "right-foot-index": 2.99
+   }
+  },
+  {
+   "angle": 60,
+   "angleErrDeg": 31.499,
+   "worst3d": [
+    "right-foot-index",
+    585.91
+   ],
+   "triRmsePx": {
+    "left-hip": 4.84,
+    "right-hip": 3.28,
+    "left-knee": 4.66,
+    "right-knee": 6.89,
+    "left-ankle": 5.6,
+    "right-ankle": 3.36,
+    "left-heel": 5.39,
+    "left-foot-index": 6.17,
+    "right-foot-index": 7.02
+   }
+  },
+  {
+   "angle": 75,
+   "angleErrDeg": 54.904,
+   "worst3d": [
+    "right-foot-index",
+    538.79
+   ],
+   "triRmsePx": {
+    "left-hip": 4.86,
+    "right-hip": 4.49,
+    "left-knee": 2.47,
+    "right-knee": 5.59,
+    "left-ankle": 1.26,
+    "right-ankle": 3.73,
+    "left-heel": 3.96,
+    "left-foot-index": 4.96,
+    "right-foot-index": 6.08
+   }
+  },
+  {
+   "angle": 90,
+   "angleErrDeg": 81.399,
+   "worst3d": [
+    "right-foot-index",
+    625.86
+   ],
+   "triRmsePx": {
+    "left-hip": 4.63,
+    "right-hip": 5.63,
+    "left-knee": 5.66,
+    "right-knee": 4.74,
+    "left-ankle": 5.07,
+    "right-ankle": 4.64,
+    "left-heel": 5.25,
+    "left-foot-index": 4.26,
+    "right-foot-index": 4.84
+   }
+  },
+  {
+   "angle": 105,
+   "angleErrDeg": 101.982,
+   "worst3d": [
+    "right-foot-index",
+    705.82
+   ],
+   "triRmsePx": {
+    "left-hip": 5.36,
+    "right-hip": 3.34,
+    "left-knee": 3.92,
+    "right-knee": 5.52,
+    "left-ankle": 5.87,
+    "right-ankle": 4.66,
+    "left-heel": 4.77,
+    "left-foot-index": 4.48,
+    "right-foot-index": 6.35
+   }
+  },
+  {
+   "angle": 120,
+   "angleErrDeg": 107.688,
+   "worst3d": [
+    "right-foot-index",
+    762.98
+   ],
+   "triRmsePx": {
+    "left-hip": 4.87,
+    "right-hip": 4.67,
+    "left-knee": 3.42,
+    "right-knee": 4.41,
+    "left-ankle": 4.79,
+    "right-ankle": 4.23,
+    "left-heel": 3.9,
+    "left-foot-index": 5.35,
+    "right-foot-index": 4.2
+   }
+  }
+ ],
+ "resolutionComparison": {
+  "0": {
+   "res256": {
+    "n": 54,
+    "drops": 0,
+    "swaps": 13,
+    "p50": 12.7,
+    "p95": 48.0,
+    "max": 56.4
+   },
+   "res384": {
+    "n": 54,
+    "drops": 0,
+    "swaps": 21,
+    "p50": 18.4,
+    "p95": 49.1,
+    "max": 66.8
+   },
+   "latencyMs": {
+    "256": {
+     "p50": 102.2,
+     "p95": 143.2
+    },
+    "384": {
+     "p50": 168.7,
+     "p95": 218.9
+    }
+   }
+  },
+  "30": {
+   "res256": {
+    "n": 59,
+    "drops": 0,
+    "swaps": 22,
+    "p50": 18.5,
+    "p95": 69.2,
+    "max": 106.2
+   },
+   "res384": {
+    "n": 59,
+    "drops": 0,
+    "swaps": 25,
+    "p50": 18.5,
+    "p95": 68.5,
+    "max": 93.8
+   },
+   "latencyMs": {
+    "256": {
+     "p50": 99.0,
+     "p95": 193.5
+    },
+    "384": {
+     "p50": 168.3,
+     "p95": 230.3
+    }
+   }
+  },
+  "60": {
+   "res256": {
+    "n": 64,
+    "drops": 0,
+    "swaps": 18,
+    "p50": 18.8,
+    "p95": 107.2,
+    "max": 130.7
+   },
+   "res384": {
+    "n": 64,
+    "drops": 0,
+    "swaps": 27,
+    "p50": 14.7,
+    "p95": 111.6,
+    "max": 125.5
+   },
+   "latencyMs": {
+    "256": {
+     "p50": 94.0,
+     "p95": 124.6
+    },
+    "384": {
+     "p50": 165.8,
+     "p95": 301.9
+    }
+   }
+  },
+  "90": {
+   "res256": {
+    "n": 64,
+    "drops": 0,
+    "swaps": 18,
+    "p50": 15.6,
+    "p95": 154.0,
+    "max": 177.0
+   },
+   "res384": {
+    "n": 64,
+    "drops": 0,
+    "swaps": 26,
+    "p50": 18.4,
+    "p95": 157.4,
+    "max": 176.4
+   },
+   "latencyMs": {
+    "256": {
+     "p50": 100.3,
+     "p95": 156.4
+    },
+    "384": {
+     "p50": 164.9,
+     "p95": 178.4
+    }
+   }
+  }
+ },
+ "realImageProbe": {
+  "images": 76,
+  "dataset": {
+   "name": "COCO-2017 val (person subset, knee/ankle labeled)",
+   "source": "http://images.cocodataset.org",
+   "license": "CC BY 4.0 (images Flickr; annotations COCO)"
+  },
+  "res256": {
+   "n": 43,
+   "drops": 1,
+   "p50": 15.7,
+   "p95": 64.2,
+   "max": 91.3
+  },
+  "res384": {
+   "n": 44,
+   "drops": 0,
+   "p50": 11.8,
+   "p95": 69.6,
+   "max": 116.1
+  },
+  "latencyMs": {
+   "256": {
+    "p50": 101.2,
+    "p95": 135.3,
+    "n": 9
+   },
+   "384": {
+    "p50": 173.7,
+    "p95": 216.7,
+    "n": 9
+   }
+  }
+ },
+ "temporalRamp": {
+  "ramp": [
+   0,
+   15,
+   30,
+   45,
+   60,
+   75,
+   90,
+   105,
+   120,
+   105,
+   90,
+   75,
+   60,
+   45,
+   30,
+   15,
+   0
+  ],
+  "polarity": {
+   "cam-01": "ambiguous",
+   "cam-02": "ambiguous",
+   "cam-03": "ambiguous",
+   "cam-04": "ambiguous",
+   "cam-05": "ambiguous",
+   "cam-06": "ambiguous",
+   "cam-07": "ambiguous",
+   "cam-08": "ambiguous"
+  },
+  "continuity": {
+   "maxJumpDeg": 12.42,
+   "jumpsOver15": 0
+  },
+  "segments": {
+   "femurR": {
+    "mean": 0.419,
+    "cv": 0.0429
+   },
+   "tibiaR": {
+    "mean": 0.4186,
+    "cv": 0.0561
+   }
+  },
+  "anatomicalPassRate": "8/17",
+  "perFrame": [
+   {
+    "frame": 0,
+    "truthAngle": 0,
+    "angle3d": 178.69,
+    "angleErr": 178.69,
+    "anatPass": true,
+    "rejections": []
+   },
+   {
+    "frame": 1,
+    "truthAngle": 15,
+    "angle3d": 168.92,
+    "angleErr": 153.92,
+    "anatPass": true,
+    "rejections": []
+   },
+   {
+    "frame": 2,
+    "truthAngle": 30,
+    "angle3d": 158.3,
+    "angleErr": 128.3,
+    "anatPass": true,
+    "rejections": []
+   },
+   {
+    "frame": 3,
+    "truthAngle": 45,
+    "angle3d": 157.04,
+    "angleErr": 112.04,
+    "anatPass": true,
+    "rejections": []
+   },
+   {
+    "frame": 4,
+    "truthAngle": 60,
+    "angle3d": 151.47,
+    "angleErr": 91.47,
+    "anatPass": false,
+    "rejections": [
+     "collapse:left-ankle/right-ankle:0.047m"
+    ]
+   },
+   {
+    "frame": 5,
+    "truthAngle": 75,
+    "angle3d": 159.89,
+    "angleErr": 84.89,
+    "anatPass": false,
+    "rejections": [
+     "collapse:left-ankle/right-ankle:0.021m"
+    ]
+   },
+   {
+    "frame": 6,
+    "truthAngle": 90,
+    "angle3d": 171.4,
+    "angleErr": 81.4,
+    "anatPass": false,
+    "rejections": [
+     "collapse:left-ankle/right-ankle:0.019m"
+    ]
+   },
+   {
+    "frame": 7,
+    "truthAngle": 105,
+    "angle3d": 177.0,
+    "angleErr": 72.0,
+    "anatPass": false,
+    "rejections": [
+     "collapse:left-ankle/right-ankle:0.019m"
+    ]
+   },
+   {
+    "frame": 8,
+    "truthAngle": 120,
+    "angle3d": 167.72,
+    "angleErr": 47.72,
+    "anatPass": false,
+    "rejections": [
+     "collapse:left-knee/right-knee:0.038m",
+     "collapse:left-ankle/right-ankle:0.027m"
+    ]
+   },
+   {
+    "frame": 9,
+    "truthAngle": 105,
+    "angle3d": 173.31,
+    "angleErr": 68.31,
+    "anatPass": false,
+    "rejections": [
+     "collapse:left-ankle/right-ankle:0.026m"
+    ]
+   },
+   {
+    "frame": 10,
+    "truthAngle": 90,
+    "angle3d": 169.37,
+    "angleErr": 79.37,
+    "anatPass": false,
+    "rejections": [
+     "collapse:left-knee/right-knee:0.041m",
+     "collapse:left-ankle/right-ankle:0.015m"
+    ]
+   },
+   {
+    "frame": 11,
+    "truthAngle": 75,
+    "angle3d": 175.14,
+    "angleErr": 100.14,
+    "anatPass": false,
+    "rejections": [
+     "collapse:left-ankle/right-ankle:0.020m"
+    ]
+   },
+   {
+    "frame": 12,
+    "truthAngle": 60,
+    "angle3d": 170.02,
+    "angleErr": 110.02,
+    "anatPass": false,
+    "rejections": [
+     "collapse:left-ankle/right-ankle:0.037m"
+    ]
+   },
+   {
+    "frame": 13,
+    "truthAngle": 45,
+    "angle3d": 157.6,
+    "angleErr": 112.6,
+    "anatPass": true,
+    "rejections": []
+   },
+   {
+    "frame": 14,
+    "truthAngle": 30,
+    "angle3d": 161.84,
+    "angleErr": 131.84,
+    "anatPass": true,
+    "rejections": []
+   },
+   {
+    "frame": 15,
+    "truthAngle": 15,
+    "angle3d": 172.52,
+    "angleErr": 157.52,
+    "anatPass": true,
+    "rejections": []
+   },
+   {
+    "frame": 16,
+    "truthAngle": 0,
+    "angle3d": 176.26,
+    "angleErr": 176.26,
+    "anatPass": true,
+    "rejections": []
+   }
+  ]
+ },
+ "anatomicalConsistency": {
+  "module": "services/biomechanics/app/anatomy/consistency.py::anatomical_consistency",
+  "checks": [
+   "segment-length bands (femur/tibia, fixture refs, 30% band)",
+   "hip-knee-ankle topology",
+   "bilateral separation >= 50mm"
+  ],
+  "temporalRampPassRate": "8/17",
+  "note": "truth-free; rejects wrong-structure solutions that reprojection RMSE passes"
+ },
+ "syntheticVsRealGap": {
+  "syntheticErrNormP50": 0.019,
+  "syntheticErrNormP95": 0.1978,
+  "real256ErrNormP50": 0.0508,
+  "real256ErrNormP95": 0.2276,
+  "real384ErrNormP50": 0.0443,
+  "real384ErrNormP95": 0.2354,
+  "note": "same-model real error ~2.5x synthetic p50: synthetic renders UNDERSTATE the perception problem; real-image benchmarking is mandatory"
+ },
+ "decision": {
+  "provider": "rtmw-l-256x192",
+  "promote384": false,
+  "reasons": [
+   "384x288 increases L/R swaps at every tested angle (18->27 @60, 13->21 @0, 22->25 @30, 18->26 @90)",
+   "1.7x inference latency for mixed 2D-error outcome",
+   "real-image probe shows no decisive 384 win (p50 15.7->11.8 but p95 64.2->69.6, one 116px outlier)",
+   "failure mode is SEMANTIC (identity/polarity), not resolution: more pixels cannot fix it"
+  ],
+  "nextSteps": [
+   "subject-aware ROI tracking (AutoLock) to disambiguate identity before triangulation",
+   "temporal identity filter across frames",
+   "anatomical_consistency as production rejection gate (truth-free)",
+   "re-run this benchmark per provider candidate through PoseBenchmarkProvider"
+  ]
+ }
+}

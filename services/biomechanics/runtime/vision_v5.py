@@ -406,6 +406,10 @@ def main() -> int:
                                          for k, v in res.residualsPx.items()},
                            "ransac": ransac_consensus(vs)}
         # L/R identity: per view, detection nearer own truth than mirror?
+        # Per-view 2D errors vs truth are recorded for the viewpoint map
+        # (P13): det error, mirror-det error, own-vs-mirror separation,
+        # confidence, and the arbitrated lid actually used for geometry.
+        view_acc: dict[str, dict] = {}
         for o in fr["observations"]:
             lid = o["landmarkId"]
             if lid not in fr["truth3d"] or mirror_of(lid) not in fr["truth3d"]:
@@ -416,8 +420,20 @@ def main() -> int:
             if float(np.linalg.norm(t_own - t_mir)) < 30.0:
                 continue  # indeterminate view: limbs overlap in projection
             d = np.array([o["xPx"], o["yPx"]])
-            if float(np.linalg.norm(d - t_mir)) + 15 < float(np.linalg.norm(d - t_own)):
+            d_own = float(np.linalg.norm(d - t_own))
+            d_mir = float(np.linalg.norm(d - t_mir))
+            if d_mir + 15 < d_own:
                 idfails.append({"cameraId": o["cameraId"], "landmark": lid})
+            view_acc.setdefault(o["cameraId"], {})[lid] = {
+                "detErrPx": round(d_own, 1),
+                "mirrorErrPx": round(d_mir, 1),
+                "separationPx": round(float(np.linalg.norm(t_own - t_mir)), 1),
+                "confidence": round(float(o["confidence"]), 3),
+                "swapped": bool(d_mir + 15 < d_own),
+                "arbitratedAs": (mirror_of(lid)
+                                 if polarity.get(o["cameraId"]) == "mirrored"
+                                 else lid),
+            }
         for lid in fr["truth3d"]:
             if lid not in points and lid not in drops:
                 drops[lid] = True
@@ -446,6 +462,7 @@ def main() -> int:
                         "err3dMm": e3d, "segmentsM": {"femurR": round(seg_fem, 4),
                                                      "tibiaR": round(seg_tib, 4)},
                         "identityFails": idfails, "dropouts": sorted(drops),
+                        "viewAccuracy": view_acc, "polarity": polarity,
                         "triangulation": detail})
 
     # production-path proof: each angle through the REAL endpoint
