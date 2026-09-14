@@ -1,4 +1,5 @@
 import LabScreen from './LabScreen';
+import { BackendBanner, useBackendStatus } from './BackendStatus';
 import FocusShell from '../features/focus/FocusShell';
 import { useFocus } from '../features/focus/focusStore';
 import GoniometerMode from '../features/rom/GoniometerMode';
@@ -26,12 +27,14 @@ export default function App() {
   const experience = useFocus((s) => s.experience);
   const setFocus = useFocus((s) => s.set);
   const inFocus = experience === 'focus';
+  const backend = useBackendStatus();
 
   return (
     <div className="flex h-full flex-col bg-[#04070d] text-slate-100">
       <a href="#workspace" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-sky-500 focus:px-3 focus:py-1">
         Skip to workspace
       </a>
+      <BackendBanner state={backend} />
       {/* Persistent shell header: brand + mode nav always reachable */}
       <header className="no-print flex flex-wrap items-center gap-2 border-b border-white/10 bg-black/60 px-4 py-2">
         <div className="flex items-baseline gap-2">

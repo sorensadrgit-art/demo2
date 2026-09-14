@@ -252,12 +252,118 @@ def validate_bundle(session_dir: Path) -> dict:
     }
 
 
+MAX_IMPORT_JOBS = 4
+_ACTIVE_IMPORTS = 0
+
+
+def _resolve_bundle_path(raw: str) -> Path:
+    """Resolve a server-local bundle path with traversal/symlink confinement.
+
+    The bundle must resolve INSIDE one of the allowed roots (explicit
+    KINELAB_CAPTURE_ROOTS, the repo tree, or /var/lib/kinelab). Absolute
+    paths are required; '..', symlinks escaping the root, and non-directory
+    targets are rejected with a typed error. Bundles never write into
+    application source: derived state lives only under var/capture/.
+    """
+    import os as _os
+
+    from ..config import SETTINGS
+
+    if not raw or len(raw) > 4096:
+        raise CaptureBundleInvalid("bundle path missing or too long")
+    p = Path(raw)
+    if not p.is_absolute():
+        raise CaptureBundleInvalid("bundle path must be absolute")
+    if p.is_symlink():
+        raise CaptureBundleInvalid("bundle root must not be a bare symlink")
+    try:
+        resolved = p.resolve()
+    except Exception as e:
+        raise CaptureBundleInvalid(f"cannot resolve bundle path: {e}") from e
+    if not resolved.is_dir():
+        raise CaptureBundleInvalid(f"bundle path not found: {raw}")
+    roots = [r for r in (_os.environ.get("KINELAB_CAPTURE_ROOTS", "") or "").split(":") if r]
+    repo_root = Path(__file__).resolve().parent.parent.parent.parent.parent
+    roots += [str(repo_root), "/var/lib/kinelab", "/tmp"]
+    allowed = False
+    for r in roots:
+        try:
+            resolved.relative_to(Path(r).resolve())
+            allowed = True
+            break
+        except Exception:  # noqa: BLE001
+            continue
+    if not allowed:
+        raise CaptureBundleInvalid("bundle path outside allowed capture roots")
+    for part in resolved.parts:
+        if part == "..":
+            raise CaptureBundleInvalid("bundle path must not contain '..'")
+    _enforce_bundle_quotas(resolved, SETTINGS)
+    return resolved
+
+
+def _enforce_bundle_quotas(session_dir: Path, settings) -> None:
+    """Configurable size/count ceilings; rejects excessive payloads cleanly."""
+    try:
+        entries = list(session_dir.rglob("*"))
+    except Exception as e:
+        raise CaptureBundleInvalid(f"cannot list bundle: {e}") from e
+    n_files = sum(1 for p in entries if p.is_file())
+    if n_files > 50000:
+        raise CaptureBundleInvalid(f"bundle has too many files ({n_files})")
+    total = 0
+    for p in entries:
+        if not p.is_file():
+            continue
+        try:
+            total += p.stat().st_size
+        except OSError:
+            continue
+        if p.suffix.lower() in (".mp4", ".mov", ".mkv", ".avi"):
+            if p.stat().st_size > settings.max_video_mb * 1024 * 1024:
+                raise CaptureBundleInvalid(
+                    f"{p.name}: video exceeds "
+                    f"{settings.max_video_mb:.0f}MB limit")
+    if total > settings.max_bundle_mb * 1024 * 1024:
+        raise CaptureBundleInvalid(
+            f"bundle size {total / 1e6:.1f}MB exceeds "
+            f"{settings.max_bundle_mb:.0f}MB limit")
+    manifest_p = session_dir / "manifest.json"
+    if manifest_p.is_file() and (
+            manifest_p.stat().st_size > settings.max_manifest_kb * 1024):
+        raise CaptureBundleInvalid(
+            f"manifest exceeds {settings.max_manifest_kb:.0f}KB limit")
+    cam_dirs = [p for p in (session_dir / "cameras").glob("*")
+                if p.is_dir()] if (session_dir / "cameras").is_dir() else []
+    if len(cam_dirs) > settings.max_cameras:
+        raise CaptureBundleInvalid(
+            f"{len(cam_dirs)} cameras exceed limit {settings.max_cameras}")
+    for cid_dir in cam_dirs:
+        ts = cid_dir / "timestamps.csv"
+        if ts.is_file():
+            with open(ts, "rb") as f:
+                rows = sum(1 for _ in f) - 1
+            if rows > settings.max_timestamp_rows:
+                raise CaptureBundleInvalid(
+                    f"{cid_dir.name}/timestamps.csv: {rows} rows exceed "
+                    f"limit {settings.max_timestamp_rows}")
+
+
 @capture.post("/import")
 def import_capture(req: CaptureImportRequest):
-    session_dir = Path(req.bundlePath)
-    if not session_dir.is_dir():
+    global _ACTIVE_IMPORTS
+    from ..config import SETTINGS as _S
+    if _ACTIVE_IMPORTS >= _S.max_concurrent_jobs * 2:
+        exc = CaptureBundleInvalid("import queue full; retry shortly")
+        return _fail(exc)
+    try:
+        session_dir = _resolve_bundle_path(req.bundlePath)
+    except Exception as e:  # noqa: BLE001 — typed failures as values
+        if hasattr(e, "code"):
+            return _fail(e)
         exc = CaptureBundleInvalid(f"bundle path not found: {req.bundlePath}")
         return _fail(exc)
+    _ACTIVE_IMPORTS += 1
     try:
         record = validate_bundle(session_dir)
     except Exception as e:  # noqa: BLE001 — typed failures as values
@@ -265,6 +371,8 @@ def import_capture(req: CaptureImportRequest):
             return _fail(e)
         exc = CaptureBundleInvalid(f"unexpected import failure: {e}")
         return _fail(exc)
+    finally:
+        _ACTIVE_IMPORTS -= 1
     sid = req.sessionId or record["sessionId"]
     stored = _session_dir(sid)
     stored.mkdir(parents=True, exist_ok=True)
