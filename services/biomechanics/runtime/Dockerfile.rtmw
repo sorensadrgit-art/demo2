@@ -1,0 +1,19 @@
+# KineLab RTMW worker (R1 production): isolated torch/mmpose runtime.
+# Checkpoint is provisioned at build/first-run and verified by SHA-256
+# before serving inference; the worker never serves a corrupt model.
+FROM python:3.11-slim AS base
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+RUN useradd -m -u 10002 rtmw && mkdir -p /app /models /cache \
+  && chown -R rtmw:rtmw /app /models /cache
+WORKDIR /app
+COPY runtime/requirements-rtmw.txt ./requirements-rtmw.txt
+RUN pip install --no-cache-dir -r requirements-rtmw.txt
+COPY runtime/rtmw_worker.py runtime/rtmw_schema.py runtime/rtmw_smoke.py ./runtime/
+COPY runtime/rtmw_compat ./runtime/rtmw_compat
+COPY ../models/rtmw/manifest.json ./models-manifest.json
+USER rtmw
+EXPOSE 8102
+ENV KINELAB_MODEL_DIR=/models RTMW_PORT=8102
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+  CMD python -c "import urllib.request,json,sys;h=json.load(urllib.request.urlopen('http://127.0.0.1:8102/health',timeout=8));sys.exit(0 if h.get('modelLoaded') else 1)"
+CMD ["sh", "-c", "python runtime/rtmw_worker.py --port ${RTMW_PORT:-8102}"]
