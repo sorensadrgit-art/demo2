@@ -1,0 +1,46 @@
+name: kinelab-release
+on:
+  push:
+    branches: ["recovery/pt-motion-focus-20260912", main]
+  pull_request:
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --no-audit --no-fund
+      - run: npx vitest run
+      - run: npx tsc --noEmit
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with: { name: web-dist, path: dist/ }
+
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - run: pip install fastapi uvicorn pydantic "numpy==2.5.3" "scipy==1.18.1" opencv-python-headless httpx pytest
+      - run: python -m pytest services/biomechanics/tests -q
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test --project=chromium
+
+  # Heavier RTMW/OpenSim-gated tests: manual/nightly only, never blocking.
+  runtime-gated:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "RTMW/OpenSim gated suite requires provisioned runtimes; see docs/DEPLOYMENT.md"

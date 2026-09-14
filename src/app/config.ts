@@ -34,7 +34,7 @@ export function validateFrontendConfig(): ConfigProblem[] {
   const problems: ConfigProblem[] = [];
   const url = biomechUrl();
   if (!/^https?:\/\//.test(url)) {
-    problems.push({ key: 'VITE_BIOMECH_URL', message: `backend URL ${url!r} must start with http(s)://` });
+          problems.push({ key: 'VITE_BIOMECH_URL', message: `backend URL "${url}" must start with http(s)://` });
   }
   if (import.meta.env.PROD && /localhost|127\.0\.0\.1/.test(url) && RELEASE_CHANNEL !== 'DEVELOPMENT') {
     problems.push({ key: 'VITE_BIOMECH_URL', message: 'production preview targets a localhost backend; set VITE_BIOMECH_URL' });
