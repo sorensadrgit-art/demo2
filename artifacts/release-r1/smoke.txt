@@ -1,0 +1,1 @@
+health 200 | version kinelab-precision-v5.6 | ready PRECISION_DEGRADED

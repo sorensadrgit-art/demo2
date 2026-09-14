@@ -1,0 +1,4 @@
+05986ce R1: add deployment docs, CI gate, release UX tests, fix frontend syntax
+b88c8a9 R1: add secure capture ingest limits and production runtime containers
+7211129 R1: harden production configuration and error handling
+122f62f KineLab capture bridge V6.1: physical ingest + Precision processing (no science changes)

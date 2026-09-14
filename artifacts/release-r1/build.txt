@@ -1,0 +1,2 @@
+dist/index.html  1,010.37 kB │ gzip: 282.38 kB
+✓ built in 2.63s
