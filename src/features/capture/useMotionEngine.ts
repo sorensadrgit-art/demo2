@@ -4,14 +4,24 @@ import { getE2EPoseSource } from '../pose/SyntheticPoseSource';
 import { useFocus } from '../focus/focusStore';
 import { SubjectTracker } from '../tracking/subjectTracker';
 import { LandmarkSmoother } from '../../lib/math/oneEuroFilter';
-import { computeAllJointAngles, JOINT_DEFS } from '../biomechanics/jointAngles';
-import { assessCameraView } from '../biomechanics/anatomicalPlanes';
+import { computeAllJointAngles, JOINT_DEFS, type JointId } from '../biomechanics/jointAngles';
 import { angularVelocity, angularAcceleration } from '../biomechanics/angularVelocity';
-import { evaluateConfidence } from '../biomechanics/confidence';
 import { RepetitionDetector } from '../movement/repetitionDetector';
 import { PhaseDetector } from '../movement/phaseDetector';
 import { detectCompensations } from '../movement/compensationEngine';
 import { estimateKneeMoment, estimateLoadingDistribution } from '../kinetics/estimatedKinetics';
+import {
+  KNEE_FLEXION_CONVENTION,
+  ELBOW_FLEXION_CONVENTION,
+  HIP_FLEXION_CONVENTION,
+  SHOULDER_FLEXION_CONVENTION,
+  computeScreenPlaneAngle,
+  type ClinicalConvention,
+} from '../solo/clinicalAngle';
+import { classifySoloView, matchRequiredView, type RequiredView } from '../solo/viewClassifier';
+import { assessFraming } from '../solo/framing';
+import { assessSoloQuality } from '../solo/qualityEngine';
+import { coachCue, type SuspensionReason } from '../solo/suspension';
 import { sessionClock } from '../../lib/timing/timeSync';
 import { perfMonitor } from '../../lib/performance/perf';
 import { frameStore, updateFrame } from '../visualization/frameStore';
@@ -94,7 +104,44 @@ function demoLandmarks(t: number): NormalizedLandmark[] {
   return mk(1);
 }
 
-/** Core pipeline: raw → gate → associate → smooth → angles → velocity → events → store. */
+function conventionForJoint(joint: JointId): ClinicalConvention {
+  if (joint === 'leftKnee' || joint === 'rightKnee') return KNEE_FLEXION_CONVENTION;
+  if (joint === 'leftElbow' || joint === 'rightElbow') return ELBOW_FLEXION_CONVENTION;
+  if (joint === 'leftHipFlex' || joint === 'rightHipFlex') return HIP_FLEXION_CONVENTION;
+  if (joint === 'leftShoulderFlex' || joint === 'rightShoulderFlex') return SHOULDER_FLEXION_CONVENTION;
+  return { id: 'screen-plane-interior', kind: 'interior', unit: 'deg' };
+}
+
+function requiredViewFor(joint: JointId, cameraPlane: 'sagittal' | 'frontal'): RequiredView {
+  // Solo V6.3: side-specific sagittal for knees; frontal for abduction
+  // protocols when the session plane is frontal.
+  if (cameraPlane === 'frontal') return 'FRONTAL';
+  if (joint === 'leftKnee') return 'LEFT_SAGITTAL';
+  if (joint === 'rightKnee') return 'RIGHT_SAGITTAL';
+  if (joint.startsWith('left')) return 'LEFT_SAGITTAL';
+  if (joint.startsWith('right')) return 'RIGHT_SAGITTAL';
+  return 'SAGITTAL';
+}
+
+function framingSideFor(joint: JointId, affectedSide: string): 'left' | 'right' {
+  if (joint.toLowerCase().startsWith('left')) return 'left';
+  if (joint.toLowerCase().startsWith('right')) return 'right';
+  if (affectedSide === 'right') return 'right';
+  return 'left';
+}
+
+function suspensionForIdentity(
+  state: string,
+  cue: string | null,
+  candidateCount: number,
+): SuspensionReason {
+  if (state === 'unselected') return 'NO_SUBJECT_SELECTED';
+  if (cue === 'clear-area' || candidateCount > 1) return 'PATIENT_IDENTITY_AMBIGUOUS';
+  if (state === 'lost' || state === 'reacquiring') return 'PATIENT_IDENTITY_AMBIGUOUS';
+  return 'TARGET_NOT_VISIBLE';
+}
+
+/** Core pipeline: raw → gate → associate → smooth → solo screen-plane angles → view/framing/quality → store. */
 export function processDetections(detections: PoseDetection[], now: number) {
   const st = useSession.getState();
   const track = engineRefs.tracker.update(detections, now);
@@ -105,66 +152,115 @@ export function processDetections(detections: PoseDetection[], now: number) {
 
   if (!active) {
     updateFrame({ landmarks: null, level: 'suspended' });
-    const reasons = track.state === 'lost'
-      ? ['TARGET LOST']
-      : track.cue === 'clear-area'
-        ? ['Clear measurement area']
-        : track.cue === 'step-into-position'
-          ? ['Patient: step into measurement position']
-          : ['NO SUBJECT SELECTED'];
-    st.set({ liveAngle: NaN, liveVel: NaN, liveLevel: 'suspended', liveReasons: reasons });
+    const suspension = suspensionForIdentity(track.state, track.cue ?? null, track.candidates.length);
+    const coach = coachCue(suspension);
+    st.set({
+      liveAngle: NaN,
+      liveVel: NaN,
+      liveLevel: 'suspended',
+      liveReasons: [suspension],
+      liveRawAngle: NaN,
+      liveFilteredAngle: NaN,
+      soloView: 'UNKNOWN',
+      soloViewQuality: 'VIEW_INVALID',
+      soloQualityState: 'SUSPENDED',
+      soloSuspension: suspension,
+      soloCoach: coach,
+    });
     e2eIdentityHook(track.activeId, track.state, track.idSwitches);
     return;
   }
   e2eIdentityHook(track.activeId, track.state, track.idSwitches);
 
-  // Temporal smoothing (One Euro) on the active subject.
+  // Temporal smoothing (One Euro) on the active subject. Raw is preserved;
+  // filtered never overwrites raw.
+  const rawLms: NormalizedLandmark[] = active.landmarks;
   const flat: number[] = [];
-  for (const l of active.landmarks) flat.push(l.x, l.y, l.z);
+  for (const l of rawLms) flat.push(l.x, l.y, l.z);
   const smoothed = smoother.smooth(flat, now / 1000);
-  const lms: NormalizedLandmark[] = active.landmarks.map((l, i) => ({
+  const lms: NormalizedLandmark[] = rawLms.map((l, i) => ({
     x: smoothed[i * 3], y: smoothed[i * 3 + 1], z: smoothed[i * 3 + 2],
     visibility: l.visibility, presence: l.presence,
   }));
 
-  const all = computeAllJointAngles(lms);
   const joint = st.activeJoint;
   const def = JOINT_DEFS[joint];
-  const view = assessCameraView(lms, def.plane);
+  const convention = conventionForJoint(joint);
+  const [proximal, apex, distal] = def.triple;
 
-  // Velocity via central difference on history.
+  // RAW from unsmoothed landmarks, FILTERED from One Euro landmarks.
+  const rawAngle = computeScreenPlaneAngle(rawLms, proximal, apex, distal, convention);
+  const filtAngle = computeScreenPlaneAngle(lms, proximal, apex, distal, convention);
+  const rawClinical = rawAngle.clinicalDeg;
+  const filtClinical = filtAngle.clinicalDeg;
+  const rawJitterDeg = Number.isFinite(rawClinical) && Number.isFinite(filtClinical)
+    ? Math.abs(rawClinical - filtClinical)
+    : 0;
+
+  // View classification + protocol match.
+  const classified = classifySoloView(lms);
+  const required = requiredViewFor(joint, st.session.cameraPlane);
+  const matched = matchRequiredView(classified, required, 'moderate');
+  const requiredYawDeg = required === 'FRONTAL' ? 0 : 90;
+
+  // Framing on the filtered landmarks.
+  const side = framingSideFor(joint, st.session.affectedSide);
+  const camMeta = st.cameraMeta;
+  const frameW = camMeta.width > 0 ? camMeta.width
+    : engineRefs.video?.videoWidth && engineRefs.video.videoWidth > 0 ? engineRefs.video.videoWidth : 1280;
+  const frameH = camMeta.height > 0 ? camMeta.height
+    : engineRefs.video?.videoHeight && engineRefs.video.videoHeight > 0 ? engineRefs.video.videoHeight : 720;
+  const framing = assessFraming(lms, side, frameW, frameH);
+
+  const identityAmbiguous = track.cue === 'clear-area'
+    || (detections.length > 1 && track.state !== 'locked');
+  const soloQuality = assessSoloQuality({
+    viewQuality: matched.quality,
+    framing,
+    landmarkVisibility: filtAngle.visibility,
+    poseScore: active.score,
+    trackingContinuity: engineRefs.tracker.continuity,
+    identityState: track.state,
+    identityAmbiguous,
+    cameraLost: false,
+    frameRate: camMeta.fps > 0 ? camMeta.fps : 30,
+    yawProxyDeg: classified.yawProxyDeg,
+    requiredYawDeg,
+    rawJitterDeg,
+  });
+  // Hard guarantee: Solo never publishes 'high' (reserved for multi-view).
+  const soloLevel = soloQuality.level === 'suspended' ? 'suspended'
+    : soloQuality.level === ('high' as string) ? 'moderate' : soloQuality.level;
+
+  const suspended = soloQuality.state === 'SUSPENDED';
+  const liveAngle = suspended ? NaN : filtClinical;
+
+  // Velocity from the filtered clinical angle history.
   let hist = angleHistory.get(joint);
   if (!hist) { hist = []; angleHistory.set(joint, hist); }
-  const r = all[joint];
-  if (r.valid) {
-    hist.push({ t: now, angle: r.angle });
+  if (!suspended && Number.isFinite(filtClinical)) {
+    hist.push({ t: now, angle: filtClinical });
     if (hist.length > 40) hist.shift();
   }
   const vel = angularVelocity(hist, hist.length - 1, 2);
   let vh = velHistory.get(joint);
   if (!vh) { vh = []; velHistory.set(joint, vh); }
-  vh.push({ t: now, vel });
+  vh.push({ t: now, vel: Number.isFinite(vel) ? vel : 0 });
   if (vh.length > 40) vh.shift();
   const acc = angularAcceleration(vh, vh.length - 1, 2);
   void acc;
 
-  const conf = evaluateConfidence({
-    landmarkVisibility: r.confidence,
-    poseScore: active.score,
-    viewSuitability: view.suitability,
-    calibrationQuality: st.calibQuality,
-    trackingContinuity: engineRefs.tracker.continuity,
-    frameDropRate: 0,
-    cameraMoving: false,
-  });
-
+  const all = computeAllJointAngles(lms);
   const angles: Record<string, number> = {};
   const valid: Record<string, boolean> = {};
   for (const [k, v] of Object.entries(all)) {
     angles[k] = v.angle;
-    valid[k] = v.valid && !conf.suspend;
+    valid[k] = v.valid && !suspended;
   }
-  updateFrame({ landmarks: lms, angles, valid, level: conf.level, activeJoint: joint });
+  // Publish the clinical filtered angle for the active joint.
+  angles[joint] = filtClinical;
+  valid[joint] = !suspended && filtAngle.valid;
+  updateFrame({ landmarks: lms, angles, valid, level: soloLevel, activeJoint: joint });
 
   // Trails + COM + vectors bookkeeping.
   if (lms[LM.leftAnkle] && lms[LM.rightAnkle]) {
@@ -197,13 +293,13 @@ export function processDetections(detections: PoseDetection[], now: number) {
     frameStore.trails.set(ankleIdx, trail);
   }
 
-  // Movement events on the primary joint.
-  const suspended = conf.suspend || !r.valid;
-  if (!suspended && st.session.movementId === 'squat') {
-    const rep = repDetector.push(now, r.angle, vel, true);
+  // Movement events on the primary joint (clinical filtered angle).
+  const filtValid = filtAngle.valid && Number.isFinite(filtClinical);
+  if (!suspended && filtValid && st.session.movementId === 'squat') {
+    const rep = repDetector.push(now, filtClinical, vel, true);
     if (rep) st.set({ repCount: rep.index });
   }
-  phaseDetector.push(now, r.valid ? r.angle : 0, vel);
+  phaseDetector.push(now, filtValid && !suspended ? filtClinical : 0, vel);
 
   // Compensation evidence (squat-oriented, generic-safe).
   const trunkLat = all.trunkLateral.valid ? 180 - all.trunkLateral.angle : NaN;
@@ -234,9 +330,9 @@ export function processDetections(detections: PoseDetection[], now: number) {
   }
 
   // Estimated kinetics (visually distinct downstream; never Newtons-measured).
-  if (!suspended && r.valid && (joint === 'leftKnee' || joint === 'rightKnee')) {
+  if (!suspended && filtValid && (joint === 'leftKnee' || joint === 'rightKnee')) {
     const mass = 74;
-    const knee = estimateKneeMoment(now, r.angle, vel, { bodyMassKg: mass, shankLengthM: 0.44, thighLengthM: 0.45, calibrated: st.calibQuality > 0.5 });
+    const knee = estimateKneeMoment(now, filtClinical, vel, { bodyMassKg: mass, shankLengthM: 0.44, thighLengthM: 0.45, calibrated: st.calibQuality > 0.5 });
     const load = estimateLoadingDistribution(
       now,
       all.leftKnee.valid ? all.leftKnee.angle : NaN,
@@ -245,14 +341,23 @@ export function processDetections(detections: PoseDetection[], now: number) {
     st.set({ kineticSamples: [...st.kineticSamples.slice(-600), knee, load] });
   }
 
-  // Live store (throttled text, not per-frame renders of heavy trees).
+  // Live store: SUSPENDED never publishes a live number. Otherwise prefer
+  // the clinical filtered angle for display. Raw is preserved separately.
+  const coach = coachCue(soloQuality.suspension) ?? framing.cue ?? null;
   st.set({
-    liveAngle: suspended ? NaN : r.angle,
+    liveAngle,
     liveVel: suspended ? NaN : vel,
-    liveLevel: conf.level,
-    liveReasons: conf.reasons,
+    liveLevel: soloLevel,
+    liveReasons: soloQuality.reasons,
+    liveRawAngle: rawClinical,
+    liveFilteredAngle: filtClinical,
+    soloView: classified.view,
+    soloViewQuality: matched.quality,
+    soloQualityState: soloQuality.state,
+    soloSuspension: soloQuality.suspension,
+    soloCoach: coach,
   });
-  st.pushSample({ t: now, angles, vel: { [joint]: vel } as never, confidence: conf.score, level: conf.level, valid: valid as never });
+  st.pushSample({ t: now, angles, vel: { [joint]: vel } as never, confidence: soloQuality.score, level: soloLevel, valid: valid as never });
 }
 
 /** React hook that owns the capture loop (webcam or demo synthesis). */

@@ -231,3 +231,26 @@ export function defaultSideFor(
   if (patientSide === 'left' || patientSide === 'right') return patientSide;
   return 'left';
 }
+
+export type RequiredView = 'LEFT_SAGITTAL' | 'RIGHT_SAGITTAL' | 'FRONTAL' | 'SAGITTAL';
+
+/**
+ * Determine the required camera viewpoint for a clinical protocol and side.
+ * - Frontal-plane protocols (e.g. shoulder abduction) -> 'FRONTAL'
+ * - Bilateral sagittal protocols (e.g. squat, sit-to-stand) -> 'SAGITTAL'
+ * - Unilateral sagittal protocols:
+ *   - side === 'left' -> 'LEFT_SAGITTAL'
+ *   - side === 'right' -> 'RIGHT_SAGITTAL'
+ *   - otherwise -> 'SAGITTAL'
+ */
+export function requiredViewFor(
+  protocol: ClinicalProtocol,
+  side?: Side,
+): RequiredView {
+  if (protocol.preferredPlane === 'frontal') return 'FRONTAL';
+  if (protocol.bilateral) return 'SAGITTAL';
+  if (side === 'left') return 'LEFT_SAGITTAL';
+  if (side === 'right') return 'RIGHT_SAGITTAL';
+  return 'SAGITTAL';
+}
+

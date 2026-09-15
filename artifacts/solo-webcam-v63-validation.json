@@ -1,0 +1,165 @@
+{
+  "$schema": "https://kinelab.ai/schemas/solo-validation-v63.json",
+  "schemaVersion": "kinelab-solo-validation-v6.3",
+  "decision": "pending",
+  "startHead": "b1f99ca34e17d09c26401bc5e51feaffe9eff7b8",
+  "status": "VALIDATION_PENDING_PHYSICAL_MEASUREMENTS",
+  "clinicalAccuracy": "NO",
+  "previewClassification": "Public Research Preview",
+  "timestamp": "2026-09-14T22:42:00Z",
+  "machine": {
+    "hostname": "soooren",
+    "model": "Alienware m18 R2",
+    "os": "Windows 11",
+    "cpu": "Intel Core i9 / x86_64",
+    "browser": "Chromium / Edge / Chrome"
+  },
+  "cameras": {
+    "primary": {
+      "name": "Integrated Webcam RGB",
+      "type": "monocular_rgb",
+      "isViewpoint": true,
+      "estimatedFps": 30
+    },
+    "auxiliary": [
+      {
+        "name": "Integrated IR",
+        "type": "infrared_sensor",
+        "isViewpoint": false,
+        "note": "IR is not a viewpoint; strictly excluded from pose and angle estimation"
+      }
+    ]
+  },
+  "privacy": {
+    "deidentified": true,
+    "containsBiometrics": false,
+    "containsIdentifiableFaceEmbeddings": false,
+    "containsRawVideo": false,
+    "retainedDataTypes": [
+      "joint_angles_degrees",
+      "landmark_visibility_ratios",
+      "inference_fps",
+      "view_classification_enum",
+      "suspension_reason_enum"
+    ]
+  },
+  "protocols": [
+    {
+      "id": "knee-flexion-arom",
+      "name": "Knee Flexion AROM",
+      "plane": "sagittal",
+      "requiredView": "LEFT_SAGITTAL",
+      "targetJoint": "leftKnee",
+      "status": "PENDING",
+      "trials": [],
+      "metrics": {
+        "meanRom": null,
+        "stdRom": null,
+        "cvPercent": null,
+        "meanAbsFilterDelta": null
+      }
+    },
+    {
+      "id": "knee-extension-arom",
+      "name": "Knee Extension AROM",
+      "plane": "sagittal",
+      "requiredView": "LEFT_SAGITTAL",
+      "targetJoint": "leftKnee",
+      "status": "PENDING",
+      "trials": [],
+      "metrics": {
+        "meanRom": null,
+        "stdRom": null,
+        "cvPercent": null,
+        "meanAbsFilterDelta": null
+      }
+    },
+    {
+      "id": "shoulder-flexion",
+      "name": "Shoulder Flexion",
+      "plane": "sagittal",
+      "requiredView": "RIGHT_SAGITTAL",
+      "targetJoint": "rightShoulderFlex",
+      "status": "PENDING",
+      "trials": [],
+      "metrics": {
+        "meanRom": null,
+        "stdRom": null,
+        "cvPercent": null,
+        "meanAbsFilterDelta": null
+      }
+    },
+    {
+      "id": "shoulder-abduction",
+      "name": "Shoulder Abduction",
+      "plane": "frontal",
+      "requiredView": "FRONTAL",
+      "targetJoint": "leftShoulderAbd",
+      "status": "PENDING",
+      "trials": [],
+      "metrics": {
+        "meanRom": null,
+        "stdRom": null,
+        "cvPercent": null,
+        "meanAbsFilterDelta": null
+      }
+    },
+    {
+      "id": "elbow-flexion",
+      "name": "Elbow Flexion",
+      "plane": "sagittal",
+      "requiredView": "LEFT_SAGITTAL",
+      "targetJoint": "leftElbow",
+      "status": "PENDING",
+      "trials": [],
+      "metrics": {
+        "meanRom": null,
+        "stdRom": null,
+        "cvPercent": null,
+        "meanAbsFilterDelta": null
+      }
+    },
+    {
+      "id": "squat",
+      "name": "Squat",
+      "plane": "sagittal",
+      "requiredView": "SAGITTAL",
+      "targetJoints": ["leftKnee", "rightKnee"],
+      "bilateral": true,
+      "status": "PENDING",
+      "trials": [],
+      "metrics": {
+        "reps": null,
+        "meanRom": null,
+        "symmetryIndex": null
+      }
+    },
+    {
+      "id": "sit-to-stand",
+      "name": "Sit-to-Stand",
+      "plane": "sagittal",
+      "requiredView": "SAGITTAL",
+      "targetJoints": ["leftKnee", "rightKnee"],
+      "bilateral": true,
+      "status": "PENDING",
+      "trials": [],
+      "metrics": {
+        "reps": null,
+        "meanRom": null,
+        "symmetryIndex": null
+      }
+    }
+  ],
+  "telemetry": {
+    "inferenceFps": "PENDING",
+    "renderFps": "PENDING",
+    "landmarkVisRatio": "PENDING",
+    "meanFilterLatencyMs": "PENDING"
+  },
+  "verificationGates": {
+    "uiAtMostOnePositioningCue": true,
+    "keyboardAccessibleControls": true,
+    "devOnlyValidationHarnessMounted": true,
+    "prohibitedDataStoragePrevented": true
+  }
+}

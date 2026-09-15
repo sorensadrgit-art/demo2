@@ -5,6 +5,7 @@ import FocusResult from './FocusResult';
 import { useFocusAutomation } from './useFocusAutomation';
 import { useFocus } from './focusStore';
 import IdentityValidationPanel, { validateIdentityRouteActive } from '../validation/IdentityValidationPanel';
+import SoloValidationPanel, { soloValidateRouteActive } from '../solo/SoloValidationPanel';
 
 /** Focus Mode: Patient → Test → Perform → Review. Advanced tools stay one tap away. */
 export default function FocusShell() {
@@ -16,15 +17,19 @@ export default function FocusShell() {
   if (phase === 'assessment-complete' || phase === 'review') return <FocusResult />;
   // setup/positioning/calibrating/acquiring/ready/recording/validating/
   // trial-complete/ready-next/error all render the treatment screen.
-  // Dev-only: ?validateIdentity mounts the real-camera validation harness
-  // beneath treatment (production ignores the query parameter).
-  if (validateIdentityRouteActive()) {
+  // Dev-only: ?validateIdentity and ?soloValidate=1 mount real-camera validation harnesses
+  // beneath treatment (production ignores the query parameters).
+  const showIdentityVal = validateIdentityRouteActive();
+  const showSoloVal = soloValidateRouteActive();
+  if (showIdentityVal || showSoloVal) {
     return (
       <div className="flex h-full flex-col gap-2 overflow-y-auto p-2">
         <div className="min-h-[60vh]"><FocusTreatment /></div>
-        <IdentityValidationPanel />
+        {showIdentityVal && <IdentityValidationPanel />}
+        {showSoloVal && <SoloValidationPanel />}
       </div>
     );
   }
   return <FocusTreatment />;
 }
+

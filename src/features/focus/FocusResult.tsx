@@ -15,6 +15,12 @@ export default function FocusResult() {
   const setSession = useSession((s) => s.set);
   const timeline = useSession((s) => s.timeline);
   const compensations = useSession((s) => s.compensations);
+  const soloView = useSession((s) => s.soloView);
+  const soloViewQuality = useSession((s) => s.soloViewQuality);
+  const soloQualityState = useSession((s) => s.soloQualityState);
+  const soloSuspension = useSession((s) => s.soloSuspension);
+  const soloCoach = useSession((s) => s.soloCoach);
+  const liveLevel = useSession((s) => s.liveLevel);
   const protocol = f.protocolId ? getProtocol(f.protocolId) : undefined;
 
   const prev = useMemo(() => {
@@ -75,10 +81,21 @@ export default function FocusResult() {
 
       <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-300">
         <p>
-          Confidence <strong className="text-slate-100">HIGH</strong> · Trials{' '}
+          Acquisition <strong className="text-slate-100">Single RGB camera</strong>
+          {' · '}Measurement <strong className="text-slate-100">camera-plane estimate</strong>
+        </p>
+        <p className="mt-1">
+          View <strong className="font-mono text-slate-100">{soloView} · {soloViewQuality}</strong>
+          {' · '}Quality <strong className="font-mono text-slate-100">{soloQualityState} · {String(liveLevel).toUpperCase()}</strong>
+          {' · '}Trials{' '}
           <strong className="font-mono text-slate-100">{validCount} / {protocol.completionCriteria.trialCount} VALID</strong>
           {agg && agg.n > 1 && <span className="text-slate-400"> · consistency SD {agg.sdExcursion.toFixed(1)}°</span>}
         </p>
+        {soloSuspension ? (
+          <p className="mt-1 text-slate-400">
+            {soloSuspension}{soloCoach ? ` — ${soloCoach}` : ''}
+          </p>
+        ) : null}
         {f.bestReason && <p className="mt-1 text-slate-400">{f.bestReason}</p>}
         {symmetry && (
           <p className="mt-1">

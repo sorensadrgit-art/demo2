@@ -5,6 +5,9 @@ import type { TrackingState } from '../features/tracking/subjectTracker';
 import type { CompensationFlag } from '../features/movement/compensationEngine';
 import type { ROMTrial } from '../features/rom/romEngine';
 import type { EstimatedKineticSample, SensorSample } from '../features/kinetics/kineticsTypes';
+import type { SoloViewClass, ViewQuality } from '../features/solo/viewClassifier';
+import type { SoloQualityState } from '../features/solo/qualityEngine';
+import type { SuspensionReason } from '../features/solo/suspension';
 
 export type SourceMode = 'webcam' | 'upload' | 'multicam' | 'demo';
 export type AppMode = 'focus' | 'measure' | 'goniometer' | 'symmetry' | 'analysis3d' | 'report' | 'progress';
@@ -26,6 +29,14 @@ export interface SessionMeta {
   startedAt: number;
 }
 
+export interface CameraMeta {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+  fps: number;
+}
+
 interface SessionState {
   sourceMode: SourceMode;
   appMode: AppMode;
@@ -37,6 +48,17 @@ interface SessionState {
   liveVel: number;
   liveLevel: ConfidenceLevel;
   liveReasons: string[];
+  /** Solo V6.3: unsmoothed screen-plane clinical angle (never overwritten by filter). */
+  liveRawAngle: number;
+  /** Solo V6.3: One Euro filtered screen-plane clinical angle. */
+  liveFilteredAngle: number;
+  /** Solo V6.3 view / quality wiring (single RGB camera only). */
+  soloView: SoloViewClass;
+  soloViewQuality: ViewQuality;
+  soloQualityState: SoloQualityState;
+  soloSuspension: SuspensionReason | null;
+  soloCoach: string | null;
+  cameraMeta: CameraMeta;
   repCount: number;
   compensations: CompensationFlag[];
   trials: ROMTrial[];
@@ -64,7 +86,15 @@ export const useSession = create<SessionState>((set) => ({
   liveAngle: NaN,
   liveVel: NaN,
   liveLevel: 'suspended',
-  liveReasons: ['NO SUBJECT SELECTED'],
+  liveReasons: ['NO_SUBJECT_SELECTED'],
+  liveRawAngle: NaN,
+  liveFilteredAngle: NaN,
+  soloView: 'UNKNOWN',
+  soloViewQuality: 'VIEW_INVALID',
+  soloQualityState: 'SUSPENDED',
+  soloSuspension: 'NO_SUBJECT_SELECTED',
+  soloCoach: 'Step into the measurement position',
+  cameraMeta: { id: '', label: '', width: 0, height: 0, fps: 0 },
   repCount: 0,
   compensations: [],
   trials: [],
