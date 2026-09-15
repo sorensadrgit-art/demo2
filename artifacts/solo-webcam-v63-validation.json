@@ -1,12 +1,12 @@
 {
   "$schema": "https://kinelab.ai/schemas/solo-validation-v63.json",
   "schemaVersion": "kinelab-solo-validation-v6.3",
-  "decision": "pending",
-  "startHead": "b1f99ca34e17d09c26401bc5e51feaffe9eff7b8",
-  "status": "VALIDATION_PENDING_PHYSICAL_MEASUREMENTS",
+  "decision": "C",
+  "startHead": "8ced82fdcb94a672e01a6118d339abfe8e5f60b0",
+  "status": "PHYSICAL_CAPTURE_PROBE_COMPLETE_TRIALS_PENDING",
   "clinicalAccuracy": "NO",
   "previewClassification": "Public Research Preview",
-  "timestamp": "2026-09-14T22:42:00Z",
+  "timestamp": "2026-09-15T14:50:00Z",
   "machine": {
     "hostname": "soooren",
     "model": "Alienware m18 R2",
@@ -16,10 +16,13 @@
   },
   "cameras": {
     "primary": {
-      "name": "Integrated Webcam RGB",
+      "name": "Integrated Webcam",
+      "usb": "0bda:557f",
       "type": "monocular_rgb",
       "isViewpoint": true,
-      "estimatedFps": 30
+      "measuredWidth": 1280,
+      "measuredHeight": 720,
+      "measuredFps": 30
     },
     "auxiliary": [
       {

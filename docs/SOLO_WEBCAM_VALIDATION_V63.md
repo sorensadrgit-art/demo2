@@ -1,8 +1,9 @@
 # KineLab Solo V6.3 Physical Webcam Validation
 
-**Status: PENDING PHYSICAL EXECUTION**  
+**Status: PHYSICAL CAPTURE PROBE COMPLETE — 5 SCORED TRIALS STILL PENDING**  
 **Clinical accuracy: NO**  
-**Preview Classification: Public Research Preview**
+**Preview Classification: Public Research Preview**  
+**Decision: C — WEBCAM_MEASUREMENT_SAFE_BUT_INCOMPLETE**
 
 > **IMPORTANT DISCLAIMER**  
 > KineLab Solo V6.3 is a single-camera 2D screen-plane motion estimation framework provided strictly as a **Public Research Preview**. It is **NOT** a medical device and has **NOT** been cleared or approved by any regulatory authority. Clinical accuracy is explicitly rated **NO**. It must not be relied upon for surgical planning, diagnostic judgment, or autonomous clinical decision-making. All measurements require validation against gold-standard optical or goniometric instruments by a licensed clinician.
@@ -23,6 +24,29 @@
 | **Pose Provider** | `MediaPipePoseProvider` (BlazePose Full, single monocular RGB feed) |
 | **Smoothing Filter** | One Euro filter (`fcmin = 1.0 Hz`, `beta = 0.007`) |
 | **Dev Validation Harness Route** | `/?soloValidate=1` |
+
+### 1.1 Physical capture probe — 2026-09-15 (this machine)
+
+App: `http://localhost:8011/?soloValidate=1` (Vite 6.4.3, Focus → Knee Flexion AROM · LEFT).
+
+| Field | Observed (not invented) |
+| :--- | :--- |
+| Browser | Playwright Chromium against local Vite (not a scored Chrome operator session) |
+| Permission first open | Denied → synthetic banner + RETRY CAMERA |
+| After grant + Retry | Integrated Webcam (USB 0bda:557f) selected as RGB |
+| IR selected | No |
+| Stream | 1280×720 @ 30 fps (from `getUserMedia` settings in validation panel) |
+| Pose provider | MediaPipePoseProvider (Single RGB) |
+| Inference / render FPS | 13 / 98 (panel; live webcam, not synthetic 165 fps) |
+| Landmarks | 0/33 visible |
+| View | UNKNOWN (VIEW_INVALID) |
+| Quality | SUSPENDED |
+| Suspension | PATIENT_IDENTITY_AMBIGUOUS |
+| Coach | Clear extra people from the frame |
+| Live ROM | — (not shown as a live number) |
+| 5 scored left-sagittal trials | **Not collected** — no locked PATIENT-A in required view |
+
+This probe proves **real RGB capture and safe suspension**. It does **not** prove Decision D.
 
 ---
 
